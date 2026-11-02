@@ -1,5 +1,5 @@
 FROM python:3.12-slim
-# Moteurs facultatifs : LibreOffice (Office -> PDF), Ghostscript (compression, PDF/A), OCRmyPDF + Tesseract (OCR)
+# Optional engines: LibreOffice (Office -> PDF), Ghostscript (compression, PDF/A), OCRmyPDF + Tesseract (OCR)
 RUN apt-get update && apt-get install -y --no-install-recommends \
       libreoffice-writer libreoffice-calc libreoffice-impress libreoffice-draw \
       ghostscript ocrmypdf tesseract-ocr-fra tesseract-ocr-eng \

@@ -261,8 +261,8 @@ def to_pdf(src: Path, outdir: Path, opts: dict) -> Path:
             return docx_to_pdf_native(src, out, opts)
         if e in ("xlsx", "xlsm", "csv", "tsv") and (e in ("csv", "tsv") or engines.has("openpyxl")):
             return sheet_to_pdf_native(src, out, opts)
-        raise RuntimeError(f"Installez LibreOffice pour convertir les fichiers .{e}.")
-    raise RuntimeError(f"Format .{e} non pris en charge.")
+        raise RuntimeError(f"Install LibreOffice to convert .{e} files.")
+    raise RuntimeError(f"Unsupported format: .{e}")
 
 
 # ------------------------------------------------------------------ depuis PDF
@@ -285,7 +285,7 @@ def pdf_to_images(src: Path, outdir: Path, opts: dict) -> list[Path]:
                 (pil.convert("RGB") if fmt != "png" else pil).save(p, quality=92)
                 outs.append(p)
         if not outs:
-            raise ValueError("Aucune image trouvée dans ce PDF.")
+            raise ValueError("No images found in this PDF.")
         return outs
     for i in range(len(doc)):
         img = doc[i].render(scale=dpi / 72).to_pil()

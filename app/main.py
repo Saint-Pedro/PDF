@@ -12,61 +12,61 @@ from pathlib import Path
 
 from fastapi import FastAPI, File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
+from fastapi.exceptions import HTTPException as FastHTTPException
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.background import BackgroundTask
 
 from . import engines, pdfops
+from .i18n import translate
 from .tools import BY_ID, CATEGORIES, public_list
 
 ROOT = Path(__file__).resolve().parent.parent
 STATIC = ROOT / "static"
 DATA = Path(os.environ.get("PDFSTUDIO_DATA", ROOT / "data"))
-ASSETS = DATA / "assets"
-BRANDING_FILE = DATA / "branding.json"
+THEME_FILE = DATA / "theme.json"
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
 MAX_MB = int(os.environ.get("MAX_UPLOAD_MB", "500"))
-ASSETS.mkdir(parents=True, exist_ok=True)
+DATA.mkdir(parents=True, exist_ok=True)
 
-DEFAULT_BRANDING: dict = json.loads((ROOT / "app" / "default_branding.json").read_text("utf-8"))
+# Branding is hard-coded in app/branding.json; only the chosen theme preset is stored at runtime.
+BRANDING: dict = json.loads((ROOT / "app" / "branding.json").read_text("utf-8"))
 
 app = FastAPI(title="PDF Studio", docs_url="/api/docs")
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
-app.mount("/assets", StaticFiles(directory=ASSETS), name="assets")
+
+
+@app.exception_handler(FastHTTPException)
+async def http_error(request: Request, exc: FastHTTPException):
+    detail = translate(str(exc.detail), request.headers.get("x-lang"))
+    return JSONResponse({"detail": detail}, status_code=exc.status_code)
 
 
 # ------------------------------------------------------------------ branding
-def deep_merge(base: dict, over: dict) -> dict:
-    out = dict(base)
-    for k, v in (over or {}).items():
-        out[k] = deep_merge(base[k], v) if isinstance(v, dict) and isinstance(base.get(k), dict) else v
-    return out
-
-
 def load_branding() -> dict:
-    if BRANDING_FILE.exists():
+    b = dict(BRANDING)
+    if THEME_FILE.exists():
         try:
-            return deep_merge(DEFAULT_BRANDING, json.loads(BRANDING_FILE.read_text("utf-8")))
+            b["preset"] = json.loads(THEME_FILE.read_text("utf-8")).get("preset")
         except Exception:
             pass
-    return DEFAULT_BRANDING
+    return b
 
 
 def check_admin(pw: str | None):
     if ADMIN_PASSWORD and not secrets.compare_digest(pw or "", ADMIN_PASSWORD):
-        raise HTTPException(401, "Mot de passe administrateur requis.")
+        raise HTTPException(401, "Admin password required.")
 
 
 @app.get("/", response_class=HTMLResponse)
-@app.get("/outil/{_any:path}", response_class=HTMLResponse)
-@app.get("/personnaliser", response_class=HTMLResponse)
+@app.get("/tool/{_any:path}", response_class=HTMLResponse)
+@app.get("/themes", response_class=HTMLResponse)
 def index(_any: str = ""):
     b = load_branding()
     html = (STATIC / "index.html").read_text("utf-8")
     esc = lambda s: (s or "").replace("&", "&amp;").replace("<", "&lt;").replace('"', "&quot;")
-    favicon = b.get("favicon") or b.get("logo") or "/static/img/favicon.svg"
     html = (html.replace("{{TITLE}}", esc(b.get("name")))
-                .replace("{{FAVICON}}", esc(favicon))
+                .replace("{{FAVICON}}", esc(b.get("favicon") or b.get("logo") or "/static/img/favicon.svg"))
                 .replace("{{BRANDING}}", json.dumps(b).replace("</", "<\\/")))
     return HTMLResponse(html)
 
@@ -75,7 +75,6 @@ def index(_any: str = ""):
 def config():
     return {
         "branding": load_branding(),
-        "defaults": DEFAULT_BRANDING,
         "tools": public_list(),
         "categories": CATEGORIES,
         "engines": {k: bool(v) for k, v in engines.detect().items()},
@@ -84,42 +83,15 @@ def config():
     }
 
 
-@app.put("/api/branding")
-async def save_branding(request: Request, x_admin_password: str | None = Header(None)):
+@app.put("/api/theme")
+async def save_theme(request: Request, x_admin_password: str | None = Header(None)):
     check_admin(x_admin_password)
     data = await request.json()
-    if not isinstance(data, dict):
-        raise HTTPException(400, "Format invalide.")
-    merged = deep_merge(DEFAULT_BRANDING, data)
-    BRANDING_FILE.write_text(json.dumps(merged, ensure_ascii=False, indent=2), "utf-8")
-    return merged
-
-
-@app.delete("/api/branding")
-def reset_branding(x_admin_password: str | None = Header(None)):
-    check_admin(x_admin_password)
-    BRANDING_FILE.unlink(missing_ok=True)
-    return DEFAULT_BRANDING
-
-
-ASSET_EXT = {"logo": {"png", "jpg", "jpeg", "svg", "webp", "gif"},
-             "favicon": {"png", "svg", "ico", "jpg", "jpeg", "webp"},
-             "font": {"woff2", "woff", "ttf", "otf"},
-             "image": {"png", "jpg", "jpeg", "svg", "webp"}}
-
-
-@app.post("/api/branding/asset")
-async def upload_asset(kind: str = Form(...), file: UploadFile = File(...),
-                       x_admin_password: str | None = Header(None)):
-    check_admin(x_admin_password)
-    ext = Path(file.filename or "").suffix.lower().lstrip(".")
-    if kind not in ASSET_EXT or ext not in ASSET_EXT[kind]:
-        raise HTTPException(400, f"Type de fichier non accepté pour {kind}.")
-    name = f"{kind}-{int(time.time())}-{secrets.token_hex(3)}.{ext}"
-    dest = ASSETS / name
-    with dest.open("wb") as f:
-        shutil.copyfileobj(file.file, f)
-    return {"url": f"/assets/{name}", "name": Path(file.filename or name).stem}
+    preset = data.get("preset") if isinstance(data, dict) else None
+    if preset is not None and not (isinstance(preset, str) and re.fullmatch(r"[a-z0-9_-]{1,40}", preset)):
+        raise HTTPException(400, "Invalid format.")
+    THEME_FILE.write_text(json.dumps({"preset": preset}), "utf-8")
+    return load_branding()
 
 
 # ------------------------------------------------------------------ traitement
@@ -143,7 +115,7 @@ async def store(upload: UploadFile, folder: Path, used: set[str]) -> Path:
         while chunk := await upload.read(1 << 20):
             size += len(chunk)
             if size > MAX_MB * 1024 * 1024:
-                raise HTTPException(413, f"Fichier trop volumineux (max {MAX_MB} Mo).")
+                raise HTTPException(413, f"File too large (max {MAX_MB} MB).")
             f.write(chunk)
     return dest
 
@@ -153,13 +125,13 @@ async def process(tool_id: str, files: list[UploadFile] = File(...),
                   options: str = Form("{}"), extra: UploadFile | None = File(None)):
     tool = BY_ID.get(tool_id)
     if not tool:
-        raise HTTPException(404, "Outil inconnu.")
+        raise HTTPException(404, "Unknown tool.")
     if tool.get("requires") and not engines.has(tool["requires"]):
-        raise HTTPException(400, f"Cet outil nécessite {tool['requires']}.")
+        raise HTTPException(400, f"This tool requires {tool['requires']}.")
     try:
         opts = json.loads(options or "{}")
     except json.JSONDecodeError:
-        raise HTTPException(400, "Options invalides.")
+        raise HTTPException(400, "Invalid options.")
     opts["_tool"] = tool_id
 
     work = Path(tempfile.mkdtemp(prefix="pdfstudio-"))
@@ -174,7 +146,7 @@ async def process(tool_id: str, files: list[UploadFile] = File(...),
         accept = set(tool["accept"])
         for p in paths:
             if p.suffix.lower().lstrip(".") not in accept:
-                raise HTTPException(400, f"« {p.name} » n'est pas un format accepté par cet outil.")
+                raise HTTPException(400, f'"{p.name}" is not a format accepted by this tool.')
         if extra is not None and extra.filename:
             opts["_image"] = await store(extra, inp, used)
         in_size = sum(p.stat().st_size for p in paths)
@@ -183,7 +155,7 @@ async def process(tool_id: str, files: list[UploadFile] = File(...),
         results = result if isinstance(result, list) else [result]
         results = [Path(r) for r in results]
         if not results:
-            raise HTTPException(500, "Aucun fichier produit.")
+            raise HTTPException(500, "No file was produced.")
         if len(results) == 1:
             final = results[0]
         else:
@@ -206,7 +178,7 @@ async def process(tool_id: str, files: list[UploadFile] = File(...),
         raise HTTPException(400, str(e))
     except Exception as e:  # pragma: no cover
         shutil.rmtree(work, ignore_errors=True)
-        raise HTTPException(500, f"Erreur inattendue : {e}")
+        raise HTTPException(500, f"Unexpected error: {e}")
 
 
 @app.post("/api/preview")
@@ -221,7 +193,7 @@ async def preview(file: UploadFile = File(...), width: int = Form(220), password
             msg = str(e).lower()
             if "password" in msg:
                 return JSONResponse({"error": "password"}, status_code=423)
-            raise HTTPException(400, "Impossible de lire ce PDF.")
+            raise HTTPException(400, "Unable to read this PDF.")
         return data
     finally:
         shutil.rmtree(work, ignore_errors=True)

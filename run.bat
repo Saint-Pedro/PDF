@@ -1,5 +1,5 @@
 @echo off
-REM Lance PDF Studio en local : http://localhost:8000
+REM Starts PDF Studio locally: http://localhost:8000
 cd /d "%~dp0"
 if not exist .venv (
   py -3 -m venv .venv

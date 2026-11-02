@@ -1,4 +1,4 @@
-"""Test de fumée : exécute chaque outil sur des fichiers générés."""
+"""Smoke test: runs every tool on generated files."""
 import io, json, sys, tempfile
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -55,7 +55,7 @@ OPTS["sign"] = {"items": [{"type": "image", "page": 0, "x": .5, "y": .8, "w": .3
 fail = 0
 for t in TOOLS:
     if t.get("requires") and not engines.has(t["requires"]):
-        print(f"SKIP {t['id']} (requiert {t['requires']})"); continue
+        print(f"SKIP {t['id']} (requires {t['requires']})"); continue
     files = INPUTS.get(t["id"], [pdf1])
     opts = {o["name"]: o.get("default") for o in t.get("options", []) if "default" in o}
     opts.update(OPTS.get(t["id"], {}))
@@ -66,4 +66,4 @@ for t in TOOLS:
 
 r = c.post("/api/preview", files={"file": ("a.pdf", pdf1.read_bytes())}); print("preview", r.status_code, r.json()["count"])
 r = c.get("/api/config"); print("config", r.status_code, len(r.json()["tools"]))
-print("ÉCHECS:", fail); sys.exit(1 if fail else 0)
+print("FAILURES:", fail); sys.exit(1 if fail else 0)

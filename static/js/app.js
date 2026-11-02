@@ -1,27 +1,31 @@
 /* ============================================================
-   PDF Studio — cœur de l'interface (routeur, accueil, résultats)
+   PDF Studio — UI core (router, home, results)
    ============================================================ */
 const App = {
   config: null,
   branding: window.__BRANDING__ || {},
   toolsById: {},
   homeFilter: { cat: "all", q: "" },
-  carry: null, // fichier transmis d'un outil à l'autre
+  carry: null, // file handed from one tool to the next
 };
 
-/* ---------- utilitaires ---------- */
+/* ---------- helpers ---------- */
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-function el(html) { const t = document.createElement("template"); t.innerHTML = html.trim(); return t.content.firstElementChild; }
-function fmtSize(b) { if (b < 1024) return b + " o"; if (b < 1048576) return (b / 1024).toFixed(1) + " Ko"; return (b / 1048576).toFixed(1) + " Mo"; }
+function el(html) { const tp = document.createElement("template"); tp.innerHTML = html.trim(); return tp.content.firstElementChild; }
+function fmtSize(b) {
+  if (b < 1024) return `${b} ${t("size.b")}`;
+  if (b < 1048576) return `${(b / 1024).toFixed(1)} ${t("size.kb")}`;
+  return `${(b / 1048576).toFixed(1)} ${t("size.mb")}`;
+}
 const extOf = (name) => (name.split(".").pop() || "").toLowerCase();
 function toast(msg, type = "") {
-  const t = el(`<div class="toast ${type}">${esc(msg)}</div>`);
-  $("#toasts").appendChild(t);
-  setTimeout(() => t.remove(), type === "error" ? 6000 : 3200);
+  const n = el(`<div class="toast ${type}">${esc(msg)}</div>`);
+  $("#toasts").appendChild(n);
+  setTimeout(() => n.remove(), type === "error" ? 6000 : 3200);
 }
-/* Sélecteur de fichiers (input attaché au DOM : requis par certains navigateurs) */
+/* File picker (input attached to the DOM: required by some browsers) */
 function chooseFiles(accept, multiple, cb) {
   const inp = el(`<input type="file" class="sr" ${multiple ? "multiple" : ""} accept="${accept}">`);
   document.body.appendChild(inp);
@@ -33,88 +37,99 @@ document.addEventListener("click", (e) => {
   const a = e.target.closest("a[data-nav]");
   if (a && !e.metaKey && !e.ctrlKey) { e.preventDefault(); nav(a.getAttribute("href")); }
 });
-window.addEventListener("popstate", route);
+window.addEventListener("popstate", () => route());
 
 function visibleTools() {
   const hidden = new Set(App.branding.hidden_tools || []);
-  return App.config.tools.filter((t) => !hidden.has(t.id));
+  return App.config.tools.filter((tl) => !hidden.has(tl.id));
 }
-const toolColorStyle = (t) => `style="--tc:${t.color}"`;
+const toolColorStyle = (tl) => `style="--tc:${tl.color}"`;
 
-/* ---------- mode clair / sombre côté visiteur ---------- */
+/* ---------- light / dark (per viewer) ---------- */
 function viewerMode() { try { return localStorage.getItem("viewer-mode"); } catch { return null; } }
-function effectiveBranding(b = App.branding) {
-  const vm = viewerMode();
-  return vm ? { ...b, mode: vm } : b;
-}
 function applyBranding(b = App.branding) {
-  Theme.apply(effectiveBranding(b));
+  Theme.apply(b, viewerMode());
   const fav = $("#favicon");
   if (fav) fav.href = b.favicon || b.logo || "/static/img/favicon.svg";
+  document.title = `${b.name}${b.tagline ? " — " + tx(b.tagline) : ""}`;
 }
 
-/* ---------- en-tête / pied ---------- */
+/* ---------- header / footer ---------- */
 function brandHTML(b = App.branding) {
   const logo = b.logo ? `<img src="${esc(b.logo)}" alt="">` : `<span class="brand-mark">${icon("file")}</span>`;
   return `${logo}${b.show_name !== false || !b.logo ? `<span>${esc(b.name)}</span>` : ""}`;
 }
 function renderHeader() {
-  const b = App.branding;
-  const cats = App.config.categories.map((c) => `<a href="/?cat=${c.id}" data-nav>${esc(c.label)}</a>`).join("");
+  const cats = App.config.categories.map((c) => `<a href="/?cat=${c.id}" data-nav>${esc(tx(c.label))}</a>`).join("");
   const dark = document.documentElement.dataset.mode === "dark";
+  const lang = Lang.get();
   $("#topbar").innerHTML = `
-    <a class="brand" href="/" data-nav>${brandHTML(b)}</a>
+    <a class="brand" href="/" data-nav>${brandHTML()}</a>
     <nav class="nav">${cats}</nav>
     <div class="top-actions">
-      <button class="icon-btn" id="mode-btn" title="${dark ? "Mode clair" : "Mode sombre"}">${icon(dark ? "sun" : "moon", 18)}</button>
-      <a class="btn sm" href="/personnaliser" data-nav title="Personnaliser l'application">${icon("palette", 16)}<span>Personnaliser</span></a>
+      <button class="lang-toggle" id="lang-btn" title="${esc(t("nav.lang_title"))}" aria-label="${esc(t("nav.lang_title"))}">
+        <span class="${lang === "en" ? "on" : ""}">EN</span><span class="${lang === "fr" ? "on" : ""}">FR</span></button>
+      <button class="icon-btn" id="mode-btn" title="${esc(t(dark ? "nav.light" : "nav.dark"))}">${icon(dark ? "sun" : "moon", 18)}</button>
+      <a class="btn sm" href="/themes" data-nav>${icon("palette", 16)}<span>${esc(t("nav.themes"))}</span></a>
     </div>`;
   $("#mode-btn").onclick = () => {
     const next = document.documentElement.dataset.mode === "dark" ? "light" : "dark";
     try { localStorage.setItem("viewer-mode", next); } catch {}
-    applyBranding();
+    applyBranding(Customize.draft || App.branding);
     renderHeader();
   };
-  document.title = b.name || "PDF Studio";
+  $("#lang-btn").onclick = () => {
+    Lang.set(Lang.get() === "en" ? "fr" : "en");
+    applyBranding(Customize.draft || App.branding);
+    renderHeader(); renderFooter();
+    rerenderView();
+  };
 }
-function renderFooter() { $("#footer").textContent = App.branding.footer || ""; }
+function renderFooter() { $("#footer").textContent = tx(App.branding.footer); }
 
-/* ---------- routeur ---------- */
+/* Re-render the current view after a language change, keeping work in progress. */
+function rerenderView() {
+  const p = location.pathname;
+  if (p.startsWith("/tool/") && Workspace.state) return Workspace.restore();
+  if (p === "/themes" && Customize.draft) return Customize.render(true);
+  route();
+}
+
+/* ---------- router ---------- */
 function route() {
   const p = location.pathname;
-  document.body.classList.remove("no-footer");
-  if (p.startsWith("/outil/")) return Workspace.open(decodeURIComponent(p.slice(7)));
-  if (p === "/personnaliser") return Customize.render();
+  if (p !== "/themes" && Customize.draft) Customize.leave();
+  if (p.startsWith("/tool/")) return Workspace.open(decodeURIComponent(p.slice(6)));
+  if (p === "/themes") return Customize.render();
   const cat = new URLSearchParams(location.search).get("cat");
   if (cat) App.homeFilter.cat = cat;
   renderHome();
 }
 
-/* ---------- accueil ---------- */
-function toolCard(t) {
-  const dis = !t.available;
-  return `<a class="tool-card ${dis ? "disabled" : ""}" href="/outil/${t.id}" data-nav ${toolColorStyle(t)}>
-      ${dis ? `<span class="badge">Requiert ${esc(t.missing)}</span>` : ""}
-      <div class="tool-icon">${icon(t.icon, 26)}</div>
-      <h3>${esc(t.title)}</h3>
-      <p>${esc(t.desc)}</p>
+/* ---------- home ---------- */
+function toolCard(tl) {
+  const dis = !tl.available;
+  return `<a class="tool-card ${dis ? "disabled" : ""}" href="/tool/${tl.id}" data-nav ${toolColorStyle(tl)}>
+      ${dis ? `<span class="badge">${esc(t("home.requires", { x: tl.missing }))}</span>` : ""}
+      <div class="tool-icon">${icon(tl.icon, 26)}</div>
+      <h3>${esc(tx(tl.title))}</h3>
+      <p>${esc(tx(tl.desc))}</p>
     </a>`;
 }
 function renderHome() {
   const b = App.branding;
-  const app = $("#app");
-  const chips = [{ id: "all", label: "Tous" }, ...App.config.categories]
-    .map((c) => `<button class="chip ${App.homeFilter.cat === c.id ? "active" : ""}" data-cat="${c.id}">${esc(c.label)}</button>`).join("");
-  app.innerHTML = `
+  const chips = [{ id: "all", label: t("home.all") }, ...App.config.categories]
+    .map((c) => `<button class="chip ${App.homeFilter.cat === c.id ? "active" : ""}" data-cat="${c.id}">${esc(tx(c.label))}</button>`).join("");
+  $("#app").innerHTML = `
     <section class="hero">
-      <h1>${esc(b.hero_title)}</h1>
-      <p>${esc(b.hero_subtitle)}</p>
+      <h1>${esc(tx(b.hero_title))}</h1>
+      <p>${esc(tx(b.hero_subtitle))}</p>
     </section>
     <div class="filters">${chips}
-      <label class="search">${icon("search", 16)}<input id="tool-search" type="search" placeholder="Rechercher un outil…" value="${esc(App.homeFilter.q)}"></label>
+      <label class="search">${icon("search", 16)}<input id="tool-search" type="search" placeholder="${esc(t("home.search"))}" value="${esc(App.homeFilter.q)}"></label>
     </div>
     <div class="tools-wrap" id="tools-wrap"></div>`;
-  $$(".chip", app).forEach((c) => (c.onclick = () => {
+  $$(".chip").forEach((c) => (c.onclick = () => {
     App.homeFilter.cat = c.dataset.cat;
     history.replaceState({}, "", c.dataset.cat === "all" ? "/" : `/?cat=${c.dataset.cat}`);
     renderHome();
@@ -128,41 +143,42 @@ function renderToolGrid() {
   const { cat, q } = App.homeFilter;
   const norm = (x) => x.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
   let tools = visibleTools();
-  if (q) tools = tools.filter((t) => norm(t.title + " " + t.desc + " " + t.accept.join(" ")).includes(norm(q)));
-  if (cat !== "all") tools = tools.filter((t) => t.cat === cat);
-  if (!tools.length) { wrap.innerHTML = `<div class="empty">Aucun outil ne correspond.</div>`; return; }
+  if (q) tools = tools.filter((tl) => norm([tl.title.en, tl.title.fr, tl.desc.en, tl.desc.fr, ...tl.accept].join(" ")).includes(norm(q)));
+  if (cat !== "all") tools = tools.filter((tl) => tl.cat === cat);
+  if (!tools.length) { wrap.innerHTML = `<div class="empty">${esc(t("home.none"))}</div>`; return; }
   if (cat !== "all" || q) { wrap.innerHTML = `<div class="tool-grid" style="margin-top:.5rem">${tools.map(toolCard).join("")}</div>`; return; }
-  const featured = (App.branding.featured_tools || []).map((id) => tools.find((t) => t.id === id)).filter(Boolean);
+  const featured = (App.branding.featured_tools || []).map((id) => tools.find((tl) => tl.id === id)).filter(Boolean);
   let html = "";
-  if (featured.length) html += `<h2 class="cat-title">Les plus utilisés</h2><div class="tool-grid">${featured.map(toolCard).join("")}</div>`;
+  if (featured.length) html += `<h2 class="cat-title">${esc(t("home.popular"))}</h2><div class="tool-grid">${featured.map(toolCard).join("")}</div>`;
   for (const c of App.config.categories) {
-    const list = tools.filter((t) => t.cat === c.id);
-    if (list.length) html += `<h2 class="cat-title">${esc(c.label)}</h2><div class="tool-grid">${list.map(toolCard).join("")}</div>`;
+    const list = tools.filter((tl) => tl.cat === c.id);
+    if (list.length) html += `<h2 class="cat-title">${esc(tx(c.label))}</h2><div class="tool-grid">${list.map(toolCard).join("")}</div>`;
   }
   wrap.innerHTML = html;
 }
 
-/* ---------- formulaire d'options généré ---------- */
+/* ---------- generated options form ---------- */
 function renderOptions(tool, opts, container, onChange = () => {}) {
   container.innerHTML = "";
   const fields = [];
   for (const o of tool.options || []) {
     if (!(o.name in opts) && o.default !== undefined) opts[o.name] = o.default;
     const id = `opt-${o.name}`;
+    const lbl = esc(tx(o.label));
     let f;
-    const label = `<label for="${id}">${esc(o.label)}</label>`;
-    const hint = o.hint ? `<div class="hint">${esc(o.hint)}</div>` : "";
+    const label = `<label for="${id}">${lbl}</label>`;
+    const hint = o.hint ? `<div class="hint">${esc(tx(o.hint))}</div>` : "";
     switch (o.type) {
       case "checkbox":
-        f = el(`<div class="field"><label class="check"><input type="checkbox" id="${id}" ${opts[o.name] ? "checked" : ""}> ${esc(o.label)}</label>${hint}</div>`);
+        f = el(`<div class="field"><label class="check"><input type="checkbox" id="${id}" ${opts[o.name] ? "checked" : ""}> ${lbl}</label>${hint}</div>`);
         $("input", f).onchange = (e) => { opts[o.name] = e.target.checked; sync(); };
         break;
       case "select":
-        f = el(`<div class="field">${label}<select class="input" id="${id}">${o.choices.map(([v, l]) => `<option value="${esc(v)}" ${String(opts[o.name]) === String(v) ? "selected" : ""}>${esc(l)}</option>`).join("")}</select>${hint}</div>`);
+        f = el(`<div class="field">${label}<select class="input" id="${id}">${o.choices.map(([v, l]) => `<option value="${esc(v)}" ${String(opts[o.name]) === String(v) ? "selected" : ""}>${esc(tx(l))}</option>`).join("")}</select>${hint}</div>`);
         $("select", f).onchange = (e) => { opts[o.name] = e.target.value; sync(); };
         break;
       case "cards":
-        f = el(`<div class="field"><span class="field-label">${esc(o.label)}</span><div class="opt-cards">${o.choices.map(([v, l, d]) => `<button type="button" class="opt-card ${opts[o.name] === v ? "active" : ""}" data-v="${esc(v)}"><span class="dot"></span><span><b>${esc(l)}</b><small>${esc(d || "")}</small></span></button>`).join("")}</div></div>`);
+        f = el(`<div class="field"><span class="field-label">${lbl}</span><div class="opt-cards">${o.choices.map(([v, l, d]) => `<button type="button" class="opt-card ${opts[o.name] === v ? "active" : ""}" data-v="${esc(v)}"><span class="dot"></span><span><b>${esc(tx(l))}</b><small>${esc(tx(d))}</small></span></button>`).join("")}</div></div>`);
         $$(".opt-card", f).forEach((b) => (b.onclick = () => { opts[o.name] = b.dataset.v; $$(".opt-card", f).forEach((x) => x.classList.toggle("active", x === b)); sync(); }));
         break;
       case "range":
@@ -179,7 +195,7 @@ function renderOptions(tool, opts, container, onChange = () => {}) {
         break;
       case "position": {
         const cells = ["top-left", "top-center", "top-right", "", "center", "", "bottom-left", "bottom-center", "bottom-right"];
-        f = el(`<div class="field"><span class="field-label">${esc(o.label)}</span><div class="pos-grid">${cells.map((c) => `<button type="button" data-v="${c}" ${c ? "" : "disabled"} class="${opts[o.name] === c ? "active" : ""}" title="${c}"></button>`).join("")}</div></div>`);
+        f = el(`<div class="field"><span class="field-label">${lbl}</span><div class="pos-grid">${cells.map((c) => `<button type="button" data-v="${c}" ${c ? "" : "disabled"} class="${opts[o.name] === c ? "active" : ""}" title="${c}"></button>`).join("")}</div></div>`);
         $$("button", f).forEach((b) => (b.onclick = () => { opts[o.name] = b.dataset.v; $$("button", f).forEach((x) => x.classList.toggle("active", x === b)); sync(); }));
         break;
       }
@@ -189,55 +205,51 @@ function renderOptions(tool, opts, container, onChange = () => {}) {
         $("input", f).oninput = (e) => { opts[o.name] = type === "number" ? +e.target.value : e.target.value; sync(); };
       }
     }
-    f.dataset.opt = o.name;
     fields.push([o, f]);
     container.appendChild(f);
   }
   function sync() {
     for (const [o, f] of fields) {
       if (!o.show_if) continue;
-      const ok = Object.entries(o.show_if).every(([k, v]) => String(opts[k]) === String(v));
-      f.classList.toggle("hidden", !ok);
+      f.classList.toggle("hidden", !Object.entries(o.show_if).every(([k, v]) => String(opts[k]) === String(v)));
     }
     onChange();
   }
   sync();
 }
 
-/* ---------- exécution d'un outil ---------- */
+/* ---------- running a tool ---------- */
 function validateOptions(tool, opts) {
-  for (const o of tool.options || []) {
-    if (o.required && !opts[o.name]) return `Le champ « ${o.label} » est requis.`;
-  }
+  for (const o of tool.options || []) if (o.required && !opts[o.name]) return t("run.required", { x: tx(o.label) });
   return null;
 }
 
 function runTool(tool, files, opts, extraFile) {
-  const app = $("#app");
-  app.innerHTML = `<div class="processing"><div class="spinner"></div><h2>${esc(tool.title)} en cours…</h2><p class="muted" id="proc-step">Envoi des fichiers</p><div class="progress"><div id="proc-bar"></div></div></div>`;
+  $("#app").innerHTML = `<div class="processing"><div class="spinner"></div><h2>${esc(t("run.working", { x: tx(tool.title) }))}</h2><p class="muted" id="proc-step">${esc(t("run.upload"))}</p><div class="progress"><div id="proc-bar"></div></div></div>`;
   const fd = new FormData();
   files.forEach((f) => fd.append("files", f, f.name));
   fd.append("options", JSON.stringify(opts));
   if (extraFile) fd.append("extra", extraFile, extraFile.name);
   const xhr = new XMLHttpRequest();
   xhr.open("POST", `/api/process/${tool.id}`);
+  xhr.setRequestHeader("X-Lang", Lang.get());
   xhr.responseType = "blob";
   xhr.upload.onprogress = (e) => {
     if (!e.lengthComputable) return;
     const pct = (e.loaded / e.total) * 100;
     $("#proc-bar").style.width = pct * 0.6 + "%";
-    if (pct >= 100) { $("#proc-step").textContent = "Traitement…"; $("#proc-bar").style.width = "75%"; }
+    if (pct >= 100) { $("#proc-step").textContent = t("run.processing"); $("#proc-bar").style.width = "75%"; }
   };
   xhr.onload = async () => {
     if (xhr.status !== 200) {
-      let msg = "Une erreur est survenue.";
+      let msg = t("run.error");
       try { msg = JSON.parse(await xhr.response.text()).detail || msg; } catch {}
       toast(msg, "error");
       Workspace.restore();
       return;
     }
     const cd = xhr.getResponseHeader("Content-Disposition") || "";
-    let name = "resultat";
+    let name = "result";
     const m = cd.match(/filename\*=utf-8''([^;]+)/i) || cd.match(/filename="?([^";]+)"?/i);
     if (m) name = decodeURIComponent(m[1]);
     renderResult(tool, xhr.response, name, {
@@ -245,7 +257,7 @@ function runTool(tool, files, opts, extraFile) {
       count: +xhr.getResponseHeader("X-File-Count"),
     });
   };
-  xhr.onerror = () => { toast("Connexion au serveur impossible.", "error"); Workspace.restore(); };
+  xhr.onerror = () => { toast(t("run.offline"), "error"); Workspace.restore(); };
   xhr.send(fd);
 }
 
@@ -259,35 +271,34 @@ function download(blob, name) {
 }
 
 function renderResult(tool, blob, name, info) {
-  const app = $("#app");
   const isPdf = name.toLowerCase().endsWith(".pdf");
   const saved = tool.id === "compress" && info.inSize ? Math.round((1 - info.outSize / info.inSize) * 100) : null;
-  const next = isPdf ? visibleTools().filter((t) => t.available && t.accept.includes("pdf") && t.id !== tool.id && t.cat !== "to_pdf") : [];
+  const next = isPdf ? visibleTools().filter((tl) => tl.available && tl.accept.includes("pdf") && tl.id !== tool.id && tl.cat !== "to_pdf") : [];
   const featured = App.branding.featured_tools || [];
   next.sort((a, b) => (featured.includes(b.id) ? 1 : 0) - (featured.includes(a.id) ? 1 : 0));
-  app.innerHTML = `
+  $("#app").innerHTML = `
     <div class="result">
       <div class="success-mark">${icon("check", 36)}</div>
-      <h1>${info.count > 1 ? "Vos fichiers sont prêts !" : "Votre fichier est prêt !"}</h1>
-      <p class="file-line">${esc(name)} · ${fmtSize(info.outSize || blob.size)}${info.count > 1 ? ` · ${info.count} fichiers (ZIP)` : ""}</p>
-      ${saved !== null ? `<div class="saving"><span class="pct">${saved > 0 ? "−" + saved : "0"}%</span><span class="muted">${fmtSize(info.inSize)} → <b>${fmtSize(info.outSize)}</b>${saved <= 0 ? "<br>Ce PDF était déjà optimisé." : ""}</span></div>` : ""}
+      <h1>${esc(t(info.count > 1 ? "res.ready_many" : "res.ready_one"))}</h1>
+      <p class="file-line">${esc(name)} · ${fmtSize(info.outSize || blob.size)}${info.count > 1 ? ` · ${esc(t("res.zip", { n: info.count }))}` : ""}</p>
+      ${saved !== null ? `<div class="saving"><span class="pct">${saved > 0 ? "−" + saved : "0"}%</span><span class="muted">${fmtSize(info.inSize)} → <b>${fmtSize(info.outSize)}</b>${saved <= 0 ? `<br>${esc(t("res.optimized"))}` : ""}</span></div>` : ""}
       <div class="actions">
-        <button class="btn primary big" id="dl">${icon("download", 22)} Télécharger</button>
-        ${isPdf ? `<a class="btn" id="view" target="_blank">${icon("eye", 18)} Aperçu</a>` : ""}
-        <button class="btn ghost" id="again">${icon("undo", 18)} Recommencer</button>
+        <button class="btn primary big" id="dl">${icon("download", 22)} ${esc(t("res.download"))}</button>
+        ${isPdf ? `<a class="btn" id="view" target="_blank">${icon("eye", 18)} ${esc(t("res.preview"))}</a>` : ""}
+        <button class="btn ghost" id="again">${icon("undo", 18)} ${esc(t("res.again"))}</button>
       </div>
-      ${next.length ? `<div class="continue"><h3>Continuer avec ce fichier…</h3><div class="list">${next.slice(0, 10).map((t) => `<button class="btn sm" data-t="${t.id}" ${toolColorStyle(t)}><span style="color:var(--tc)">${icon(t.icon, 16)}</span>${esc(t.title)}</button>`).join("")}</div></div>` : ""}
+      ${next.length ? `<div class="continue"><h3>${esc(t("res.continue"))}</h3><div class="list">${next.slice(0, 10).map((tl) => `<button class="btn sm" data-t="${tl.id}" ${toolColorStyle(tl)}><span style="color:var(--tc)">${icon(tl.icon, 16)}</span>${esc(tx(tl.title))}</button>`).join("")}</div></div>` : ""}
     </div>`;
   $("#dl").onclick = () => download(blob, name);
   if (isPdf) $("#view").href = URL.createObjectURL(blob);
-  $("#again").onclick = () => nav(`/outil/${tool.id}`);
+  $("#again").onclick = () => nav(`/tool/${tool.id}`);
   $$(".continue [data-t]").forEach((b) => (b.onclick = () => {
     App.carry = [new File([blob], name, { type: "application/pdf" })];
-    nav(`/outil/${b.dataset.t}`);
+    nav(`/tool/${b.dataset.t}`);
   }));
 }
 
-/* ---------- aperçus ---------- */
+/* ---------- previews ---------- */
 const thumbCache = new WeakMap();
 async function pdfPreview(file, { width = 220, maxPages = 1, password = "" } = {}) {
   const key = `${width}-${maxPages}`;
@@ -300,23 +311,23 @@ async function pdfPreview(file, { width = 220, maxPages = 1, password = "" } = {
   if (password) fd.append("password", password);
   const r = await fetch("/api/preview", { method: "POST", body: fd });
   if (r.status === 423) return { locked: true, count: 0, pages: [] };
-  if (!r.ok) throw new Error("Aperçu impossible");
+  if (!r.ok) throw new Error("preview");
   const data = await r.json();
   cache[key] = data;
   thumbCache.set(file, cache);
   return data;
 }
 
-/* ---------- démarrage ---------- */
+/* ---------- boot ---------- */
 async function boot() {
   applyBranding();
   App.config = await (await fetch("/api/config")).json();
   App.branding = App.config.branding;
-  App.config.tools.forEach((t) => (App.toolsById[t.id] = t));
+  App.config.tools.forEach((tl) => (App.toolsById[tl.id] = tl));
   applyBranding();
   renderHeader();
   renderFooter();
   route();
-  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { applyBranding(); renderHeader(); });
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { applyBranding(Customize.draft || App.branding); renderHeader(); });
 }
 document.addEventListener("DOMContentLoaded", boot);

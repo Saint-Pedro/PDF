@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Lance PDF Studio en local : http://localhost:8000
+# Starts PDF Studio locally: http://localhost:8000
 set -e
 cd "$(dirname "$0")"
 if [ ! -d .venv ]; then

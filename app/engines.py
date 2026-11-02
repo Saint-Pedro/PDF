@@ -56,7 +56,7 @@ def run(cmd: list[str], timeout: int = 300) -> subprocess.CompletedProcess:
     res = subprocess.run(cmd, capture_output=True, timeout=timeout)
     if res.returncode != 0:
         err = (res.stderr or res.stdout or b"").decode("utf-8", "ignore")[-800:]
-        raise RuntimeError(f"{Path(cmd[0]).name} a échoué : {err}")
+        raise RuntimeError(f"{Path(cmd[0]).name} failed: {err}")
     return res
 
 
@@ -65,7 +65,7 @@ def libreoffice_convert(src: Path, fmt: str, outdir: Path, infilter: str | None 
     plusieurs conversions en parallèle sans conflit de verrou."""
     soffice = detect()["libreoffice"]
     if not soffice:
-        raise RuntimeError("LibreOffice n'est pas installé.")
+        raise RuntimeError("LibreOffice is not installed.")
     with tempfile.TemporaryDirectory(prefix="lo-profile-") as prof:
         cmd = [
             str(soffice),
@@ -79,5 +79,5 @@ def libreoffice_convert(src: Path, fmt: str, outdir: Path, infilter: str | None 
     ext = fmt.split(":")[0]
     out = outdir / f"{src.stem}.{ext}"
     if not out.exists():
-        raise RuntimeError("LibreOffice n'a produit aucun fichier.")
+        raise RuntimeError("LibreOffice produced no file.")
     return out

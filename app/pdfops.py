@@ -52,13 +52,13 @@ def parse_ranges(spec: str, total: int) -> list[list[int]]:
         elif part.isdigit():
             a = b = int(part)
         else:
-            raise ValueError(f"Plage invalide : « {part} »")
+            raise ValueError(f'Invalid range: "{part}"')
         a, b = max(1, a), min(total, b)
         if a > b:
-            raise ValueError(f"Plage vide : « {part} »")
+            raise ValueError(f'Empty range: "{part}"')
         groups.append(list(range(a - 1, b)))
     if not groups:
-        raise ValueError("Aucune page indiquée.")
+        raise ValueError("No pages specified.")
     return groups
 
 
@@ -75,7 +75,7 @@ def open_reader(path: Path, password: str | None = None) -> PdfReader:
     r = PdfReader(str(path), strict=False)
     if r.is_encrypted:
         if not r.decrypt(password or ""):
-            raise ValueError(f"« {path.name} » est protégé par mot de passe.")
+            raise ValueError(f'"{path.name}" is password-protected.')
     return r
 
 
@@ -165,7 +165,7 @@ def remove_pages(file: Path, out: Path, opts: dict) -> Path:
     drop = set(flat_pages(opts.get("pages", ""), n))
     keep = [i for i in range(n) if i not in drop]
     if not keep:
-        raise ValueError("Impossible de supprimer toutes les pages.")
+        raise ValueError("You cannot remove every page.")
     return select_pages(file, out, keep)
 
 
@@ -191,7 +191,7 @@ def organize(file: Path, out: Path, opts: dict) -> Path:
         if int(item.get("rot", 0)) % 360:
             p.rotate(int(item["rot"]) % 360)
     if not len(w.pages):
-        raise ValueError("Le document résultant serait vide.")
+        raise ValueError("The resulting document would be empty.")
     return save(w, out)
 
 
@@ -298,14 +298,14 @@ def repair(file: Path, out: Path, opts: dict) -> Path:
         except Exception:
             continue
     if not len(w.pages):
-        raise ValueError("Le fichier est trop endommagé pour être réparé.")
+        raise ValueError("The file is too damaged to be repaired.")
     return save(w, out)
 
 
 def ocr(file: Path, out: Path, opts: dict) -> Path:
     exe = engines.detect()["ocrmypdf"]
     if not exe:
-        raise RuntimeError("OCRmyPDF (et Tesseract) doit être installé pour l'OCR.")
+        raise RuntimeError("OCRmyPDF (and Tesseract) must be installed for OCR.")
     lang = opts.get("lang", "fra+eng")
     engines.run([str(exe), "--skip-text", "-l", lang, "--output-type", "pdf", str(file), str(out)], timeout=1800)
     return out
@@ -314,7 +314,7 @@ def ocr(file: Path, out: Path, opts: dict) -> Path:
 def pdfa(file: Path, out: Path, opts: dict) -> Path:
     gs = engines.detect()["ghostscript"]
     if not gs:
-        raise RuntimeError("Ghostscript est nécessaire pour la conversion PDF/A.")
+        raise RuntimeError("Ghostscript is required for PDF/A conversion.")
     level = opts.get("level", "2")
     engines.run([str(gs), f"-dPDFA={level}", "-dBATCH", "-dNOPAUSE", "-dQUIET",
                  "-sColorConversionStrategy=RGB", "-sDEVICE=pdfwrite",
@@ -413,7 +413,7 @@ def page_numbers(file: Path, out: Path, opts: dict) -> Path:
 
 def watermark(file: Path, out: Path, opts: dict, image: Path | None = None) -> Path:
     w = PdfWriter(clone_from=open_reader(file))
-    text = opts.get("text") or "CONFIDENTIEL"
+    text = opts.get("text") or "CONFIDENTIAL"
     size = float(opts.get("size", 60))
     opacity = float(opts.get("opacity", 30)) / 100
     angle = float(opts.get("angle", 45))
@@ -464,7 +464,7 @@ def crop(file: Path, out: Path, opts: dict) -> Path:
         mb = p.mediabox
         box = RectangleObject([float(mb.left) + l, float(mb.bottom) + b, float(mb.right) - r_, float(mb.top) - t])
         if box.width <= 10 or box.height <= 10:
-            raise ValueError("Marges trop grandes pour la page.")
+            raise ValueError("Margins are too large for the page.")
         p.cropbox = box
         p.mediabox = box
     return save(w, out)
@@ -484,7 +484,7 @@ def edit(file: Path, out: Path, opts: dict) -> Path:
              text, size (fraction de la hauteur), color, src (dataURL)}]"""
     items = opts.get("items") or []
     if not items:
-        raise ValueError("Ajoutez au moins un élément sur le document.")
+        raise ValueError("Add at least one element to the document.")
     w = PdfWriter(clone_from=open_reader(file))
     by_page: dict[int, list[dict]] = {}
     for it in items:
@@ -523,7 +523,7 @@ def redact(file: Path, out: Path, opts: dict) -> Path:
     terms = [t.strip() for t in re.split(r"[\n,;]", opts.get("terms", "")) if t.strip()]
     areas = opts.get("items") or []
     if not terms and not areas:
-        raise ValueError("Indiquez des mots à caviarder ou dessinez des zones.")
+        raise ValueError("Enter words to redact or draw areas.")
     doc = pdfium.PdfDocument(str(file))
     hits: dict[int, list[tuple[float, float, float, float]]] = {}
     for i in range(len(doc)):
@@ -538,7 +538,7 @@ def redact(file: Path, out: Path, opts: dict) -> Path:
     for a in areas:
         hits.setdefault(int(a["page"]), []).append(("frac", a["x"], a["y"], a["w"], a["h"]))
     if not hits:
-        raise ValueError("Aucune occurrence trouvée.")
+        raise ValueError("No matches found.")
     sizes = {i: doc[i].get_size() for i in hits}
     color = opts.get("color") or "#000000"
 
@@ -561,9 +561,9 @@ def redact(file: Path, out: Path, opts: dict) -> Path:
 def protect(file: Path, out: Path, opts: dict) -> Path:
     pw = opts.get("password") or ""
     if len(pw) < 1:
-        raise ValueError("Indiquez un mot de passe.")
+        raise ValueError("Enter a password.")
     if opts.get("confirm") is not None and opts.get("confirm") != pw:
-        raise ValueError("Les mots de passe ne correspondent pas.")
+        raise ValueError("Passwords do not match.")
     w = PdfWriter(clone_from=open_reader(file))
     perms = Perm.PRINT | Perm.PRINT_TO_REPRESENTATION | Perm.EXTRACT | Perm.MODIFY | Perm.ADD_OR_MODIFY | Perm.FILL_FORM_FIELDS | Perm.ASSEMBLE_DOC | Perm.EXTRACT_TEXT_AND_GRAPHICS
     if opts.get("no_print"):
@@ -580,7 +580,7 @@ def protect(file: Path, out: Path, opts: dict) -> Path:
 def unlock(file: Path, out: Path, opts: dict) -> Path:
     r = PdfReader(str(file), strict=False)
     if r.is_encrypted and not r.decrypt(opts.get("password") or ""):
-        raise ValueError("Mot de passe incorrect.")
+        raise ValueError("Incorrect password.")
     w = PdfWriter(clone_from=r)
     return save(w, out)
 

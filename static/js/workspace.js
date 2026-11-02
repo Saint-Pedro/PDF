@@ -1,5 +1,5 @@
 /* ============================================================
-   Espace de travail : sélection, ordre des fichiers, pages
+   Workspace: file selection, file ordering, page editing
    ============================================================ */
 const Workspace = {
   state: null,
@@ -7,7 +7,7 @@ const Workspace = {
 
   open(id) {
     const tool = App.toolsById[id];
-    if (!tool) { $("#app").innerHTML = `<div class="empty">Outil introuvable. <a href="/" data-nav>Retour</a></div>`; return; }
+    if (!tool) { $("#app").innerHTML = `<div class="empty">${esc(t("err.notfound"))} <a href="/" data-nav>${esc(t("back"))}</a></div>`; return; }
     this.state = { tool, files: [], opts: {}, extra: null, layout: null, items: [] };
     if (App.carry) {
       const carried = App.carry; App.carry = null;
@@ -24,15 +24,15 @@ const Workspace = {
   landing() {
     const { tool } = this.state;
     const pdfOnly = tool.accept.length === 1 && tool.accept[0] === "pdf";
-    const label = pdfOnly ? (tool.multiple ? "Sélectionner des fichiers PDF" : "Sélectionner un fichier PDF") : (tool.multiple ? "Sélectionner des fichiers" : "Sélectionner un fichier");
+    const label = t(pdfOnly ? (tool.multiple ? "land.pick_pdf_multi" : "land.pick_pdf") : (tool.multiple ? "land.pick_multi" : "land.pick"));
     $("#app").innerHTML = `
       <section class="tool-landing" ${toolColorStyle(tool)}>
-        ${!tool.available ? `<div class="notice">${icon("wrench", 20)}<div><b>Moteur manquant :</b> cet outil nécessite <b>${esc(tool.missing)}</b>. Installez-le puis redémarrez l'application.</div></div>` : ""}
-        <h1>${esc(tool.title)}</h1>
-        <p>${esc(tool.desc)}</p>
-        <button class="btn primary big" id="pick" ${tool.available ? "" : "disabled"}>${icon("upload", 22)} ${label}</button>
-        <div class="drop-hint">ou déposez ${tool.multiple ? "vos fichiers" : "votre fichier"} ici</div>
-        ${!pdfOnly ? `<div class="formats">Formats acceptés : ${tool.accept.map((e) => e.toUpperCase()).join(", ")}</div>` : ""}
+        ${!tool.available ? `<div class="notice">${icon("wrench", 20)}<div>${t("land.missing", { x: esc(tool.missing) })}</div></div>` : ""}
+        <h1>${esc(tx(tool.title))}</h1>
+        <p>${esc(tx(tool.desc))}</p>
+        <button class="btn primary big" id="pick" ${tool.available ? "" : "disabled"}>${icon("upload", 22)} ${esc(label)}</button>
+        <div class="drop-hint">${esc(t(tool.multiple ? "land.drop_multi" : "land.drop"))}</div>
+        ${!pdfOnly ? `<div class="formats">${esc(t("land.formats", { x: tool.accept.map((e) => e.toUpperCase()).join(", ") }))}</div>` : ""}
       </section>`;
     $("#pick").onclick = () => this.pick();
     this.enableDrop();
@@ -46,12 +46,13 @@ const Workspace = {
   enableDrop() {
     let ov = $(".drop-overlay");
     if (!ov) {
-      ov = el(`<div class="drop-overlay"><div>${icon("upload", 48)}<span>Déposez vos fichiers</span></div></div>`);
+      ov = el(`<div class="drop-overlay"><div>${icon("upload", 48)}<span></span></div></div>`);
       document.body.appendChild(ov);
     }
+    $("span", ov).textContent = t("drop.overlay");
     let depth = 0;
     const isFiles = (e) => [...(e.dataTransfer?.types || [])].includes("Files");
-    const onPage = () => location.pathname.startsWith("/outil/");
+    const onPage = () => location.pathname.startsWith("/tool/");
     window.ondragenter = (e) => { if (!isFiles(e) || !onPage()) return; depth++; ov.classList.add("show"); };
     window.ondragleave = (e) => { if (!isFiles(e)) return; depth = Math.max(0, depth - 1); if (!depth) ov.classList.remove("show"); };
     window.ondragover = (e) => { if (isFiles(e)) e.preventDefault(); };
@@ -67,7 +68,7 @@ const Workspace = {
     const { tool } = this.state;
     const ok = [], bad = [];
     for (const f of list) (tool.accept.includes(extOf(f.name)) ? ok : bad).push(f);
-    if (bad.length) toast(`Format non pris en charge : ${bad.map((f) => f.name).join(", ")}`, "error");
+    if (bad.length) toast(t("err.format", { x: bad.map((f) => f.name).join(", ") }), "error");
     if (!ok.length) return;
     const add = tool.multiple ? ok : ok.slice(0, 1);
     if (!tool.multiple) this.state.files = [];
@@ -85,13 +86,13 @@ const Workspace = {
     return this.renderFiles();
   },
 
-  /* ---------------- barre latérale commune ---------------- */
+  /* ---------------- shared sidebar ---------------- */
   sidebar(extraTop = "") {
     const { tool } = this.state;
     return `<aside class="sidebar" ${toolColorStyle(tool)}>
-        <div class="sidebar-head"><h2>${esc(tool.title)}</h2><p>${esc(tool.desc)}</p></div>
+        <div class="sidebar-head"><h2>${esc(tx(tool.title))}</h2><p>${esc(tx(tool.desc))}</p></div>
         <div class="sidebar-body">${extraTop}<div id="opts" style="display:flex;flex-direction:column;gap:1.1rem"></div><div id="summary"></div></div>
-        <div class="sidebar-foot"><button class="btn primary block" id="go">${esc(tool.title)} ${icon("arrow-right", 20)}</button></div>
+        <div class="sidebar-foot"><button class="btn primary block" id="go">${esc(tx(tool.title))} ${icon("arrow-right", 20)}</button></div>
       </aside>`;
   },
 
@@ -101,14 +102,14 @@ const Workspace = {
     renderOptions(tool, opts, $("#opts"), upd);
     if (tool.extra_file) {
       const ef = tool.extra_file;
-      const f = el(`<div class="field"><span class="field-label">${esc(ef.label)}</span>
-        <div style="display:flex;gap:.5rem;align-items:center"><button class="btn sm" type="button" id="extra-btn">${icon("image", 16)} Choisir</button><span class="muted" id="extra-name" style="font-size:.85rem">${this.state.extra ? esc(this.state.extra.name) : "Aucune"}</span>
+      const f = el(`<div class="field"><span class="field-label">${esc(tx(ef.label))}</span>
+        <div style="display:flex;gap:.5rem;align-items:center"><button class="btn sm" type="button" id="extra-btn">${icon("image", 16)} ${esc(t("ws.choose"))}</button><span class="muted" id="extra-name" style="font-size:.85rem">${esc(this.state.extra ? this.state.extra.name : t("ws.none"))}</span>
         <button class="btn sm ghost ${this.state.extra ? "" : "hidden"}" id="extra-clear" type="button">${icon("x", 14)}</button></div></div>`);
       $("#opts").prepend(f);
-      $("#extra-btn", f).onclick = () => {
-        chooseFiles(ef.accept.map((e) => "." + e).join(","), false, ([f]) => { this.state.extra = f; $("#extra-name").textContent = f.name; $("#extra-clear").classList.remove("hidden"); });
-      };
-      $("#extra-clear", f).onclick = () => { this.state.extra = null; $("#extra-name").textContent = "Aucune"; $("#extra-clear").classList.add("hidden"); };
+      $("#extra-btn", f).onclick = () => chooseFiles(ef.accept.map((e) => "." + e).join(","), false, ([file]) => {
+        this.state.extra = file; $("#extra-name").textContent = file.name; $("#extra-clear").classList.remove("hidden");
+      });
+      $("#extra-clear", f).onclick = () => { this.state.extra = null; $("#extra-name").textContent = t("ws.none"); $("#extra-clear").classList.add("hidden"); };
     }
     upd();
     $("#go").onclick = () => {
@@ -120,17 +121,17 @@ const Workspace = {
     };
   },
 
-  /* ---------------- mode fichiers ---------------- */
+  /* ---------------- files mode ---------------- */
   renderFiles() {
     const { tool, files } = this.state;
-    const ordered = tool.id === "merge" || tool.id === "img_to_pdf" || tool.id === "any_to_pdf";
+    const ordered = ["merge", "img_to_pdf", "any_to_pdf"].includes(tool.id);
     $("#app").innerHTML = `
       <div class="workspace">
         <section class="work-area">
           <div class="work-toolbar">
-            <b>${files.length} fichier${files.length > 1 ? "s" : ""}</b>
-            ${ordered && files.length > 1 ? `<span class="muted" style="font-size:.85rem">· glissez pour réordonner</span>
-              <button class="btn sm ghost" id="sort-az">Trier A→Z</button><button class="btn sm ghost" id="sort-rev">Inverser</button>` : ""}
+            <b>${esc(t("ws.files", { n: files.length }))}</b>
+            ${ordered && files.length > 1 ? `<span class="muted" style="font-size:.85rem">${esc(t("ws.reorder"))}</span>
+              <button class="btn sm ghost" id="sort-az">${esc(t("ws.sort"))}</button><button class="btn sm ghost" id="sort-rev">${esc(t("ws.reverse"))}</button>` : ""}
             <span class="spacer"></span>
           </div>
           <div class="file-grid" id="file-grid"></div>
@@ -140,20 +141,19 @@ const Workspace = {
     const grid = $("#file-grid");
     files.forEach((f, i) => grid.appendChild(this.fileCard(f, i, ordered)));
     if (tool.multiple) {
-      const add = el(`<button class="add-card">${icon("plus", 32)}<span>Ajouter</span></button>`);
+      const add = el(`<button class="add-card">${icon("plus", 32)}<span>${esc(t("ws.add"))}</span></button>`);
       add.onclick = () => this.pick();
       grid.appendChild(add);
     }
-    $("#sort-az") && ($("#sort-az").onclick = () => { files.sort((a, b) => a.file.name.localeCompare(b.file.name, "fr", { numeric: true })); this.renderFiles(); });
+    $("#sort-az") && ($("#sort-az").onclick = () => { files.sort((a, b) => a.file.name.localeCompare(b.file.name, undefined, { numeric: true })); this.renderFiles(); });
     $("#sort-rev") && ($("#sort-rev").onclick = () => { files.reverse(); this.renderFiles(); });
+    const min = tool.min_files || 1;
     this.bindSidebar(() => {
-      const min = tool.min_files || 1;
-      if (files.length < min) { toast(`Ajoutez au moins ${min} fichiers.`, "error"); return null; }
+      if (files.length < min) { toast(t("ws.min_files", { n: min }), "error"); return null; }
       return { files: files.map((f) => f.file) };
     }, () => {
       const total = files.reduce((s, f) => s + f.file.size, 0);
-      const min = tool.min_files || 1;
-      return `<div class="summary">${files.length} fichier${files.length > 1 ? "s" : ""} · ${fmtSize(total)}${files.length < min ? `<br><span style="color:var(--primary)">Ajoutez au moins ${min} fichiers.</span>` : ""}</div>`;
+      return `<div class="summary">${esc(t("ws.files", { n: files.length }))} · ${fmtSize(total)}${files.length < min ? `<br><span style="color:var(--primary)">${esc(t("ws.min_files", { n: min }))}</span>` : ""}</div>`;
     });
   },
 
@@ -162,7 +162,7 @@ const Workspace = {
     const e = extOf(f.name);
     const card = el(`<div class="file-card" draggable="true" data-id="${entry.id}">
         ${ordered ? `<span class="order-badge">${i + 1}</span>` : ""}
-        <div class="card-actions"><button title="Retirer" data-act="rm">${icon("x", 14)}</button></div>
+        <div class="card-actions"><button title="${esc(t("ws.remove"))}" data-act="rm">${icon("x", 14)}</button></div>
         <div class="thumb"><span class="ext">${icon("file", 34)}${esc(e)}</span></div>
         <div class="name" title="${esc(f.name)}">${esc(f.name)}</div>
         <div class="meta">${fmtSize(f.size)}<span class="pc"></span></div>
@@ -172,9 +172,9 @@ const Workspace = {
       thumb.innerHTML = `<img src="${URL.createObjectURL(f)}" alt="">`;
     } else if (e === "pdf") {
       pdfPreview(f).then((d) => {
-        if (d.locked) { thumb.innerHTML = `<span class="ext">${icon("lock", 34)}Protégé</span>`; return; }
+        if (d.locked) { thumb.innerHTML = `<span class="ext">${icon("lock", 34)}${esc(t("ws.locked"))}</span>`; return; }
         thumb.innerHTML = `<img src="${d.pages[0].src}" alt="">`;
-        $(".pc", card).textContent = ` · ${d.count} page${d.count > 1 ? "s" : ""}`;
+        $(".pc", card).textContent = ` · ${t("ws.pages", { n: d.count })}`;
       }).catch(() => {});
     }
     $('[data-act="rm"]', card).onclick = (ev) => {
@@ -186,7 +186,7 @@ const Workspace = {
     return card;
   },
 
-  /* Réordonnancement par glisser-déposer (cartes fichier ou page) */
+  /* Drag-and-drop reordering (file or page cards) */
   makeSortable(card, arr, rerender, key = "id") {
     card.addEventListener("dragstart", (e) => {
       card.classList.add("dragging");
@@ -214,32 +214,33 @@ const Workspace = {
     });
   },
 
-  /* ---------------- mode pages ---------------- */
+  /* ---------------- pages mode ---------------- */
   async renderPages() {
     const st = this.state;
     const { tool } = st;
     const file = st.files[0].file;
     const action = tool.page_action || "organize";
-    $("#app").innerHTML = `<div class="processing"><div class="spinner"></div><h2>Chargement des pages…</h2></div>`;
+    $("#app").innerHTML = `<div class="processing"><div class="spinner"></div><h2>${esc(t("pg.loading"))}</h2></div>`;
     let data;
     try { data = await pdfPreview(file, { width: 240, maxPages: 2000 }); }
-    catch { toast("Impossible de lire ce PDF.", "error"); return this.landing(); }
-    if (data.locked) { toast("Ce PDF est protégé : déverrouillez-le d'abord.", "error"); return this.landing(); }
+    catch { toast(t("pg.unreadable"), "error"); return this.landing(); }
+    if (data.locked) { toast(t("pg.locked"), "error"); return this.landing(); }
     if (!st.layout) st.layout = data.pages.map((p, i) => ({ key: "p" + i, src: i, rot: 0, removed: false, selected: false }));
     const zoom = st.zoom || 150;
     const L = st.layout;
     const toolbar = {
-      organize: `<button class="btn sm" id="rot-all-l">${icon("rotate-ccw", 16)} Tout pivoter</button><button class="btn sm" id="rot-all-r">${icon("rotate", 16)} Tout pivoter</button>
-                 <button class="btn sm" id="add-blank">${icon("file-plus", 16)} Page blanche</button><button class="btn sm" id="reverse">Inverser l'ordre</button><button class="btn sm ghost" id="reset">${icon("undo", 16)} Réinitialiser</button>`,
-      remove: `<input class="input" id="range" placeholder="Pages : 2, 5-7" style="width:170px"><button class="btn sm" id="apply-range">Marquer</button><button class="btn sm ghost" id="reset">${icon("undo", 16)} Tout garder</button>`,
-      extract: `<input class="input" id="range" placeholder="Pages : 1-3, 8" style="width:170px"><button class="btn sm" id="apply-range">Sélectionner</button><button class="btn sm" id="sel-all">Tout</button><button class="btn sm" id="sel-odd">Impaires</button><button class="btn sm" id="sel-even">Paires</button><button class="btn sm ghost" id="reset">Aucune</button>`,
+      organize: `<button class="btn sm" id="rot-all-l">${icon("rotate-ccw", 16)} ${esc(t("pg.rot_all"))}</button><button class="btn sm" id="rot-all-r">${icon("rotate", 16)} ${esc(t("pg.rot_all"))}</button>
+                 <button class="btn sm" id="add-blank">${icon("file-plus", 16)} ${esc(t("pg.blank"))}</button><button class="btn sm" id="reverse">${esc(t("pg.reverse"))}</button><button class="btn sm ghost" id="reset">${icon("undo", 16)} ${esc(t("pg.reset"))}</button>`,
+      remove: `<input class="input" id="range" placeholder="${esc(t("pg.range_rm"))}" style="width:170px"><button class="btn sm" id="apply-range">${esc(t("pg.mark"))}</button><button class="btn sm ghost" id="reset">${icon("undo", 16)} ${esc(t("pg.keep_all"))}</button>`,
+      extract: `<input class="input" id="range" placeholder="${esc(t("pg.range_ex"))}" style="width:170px"><button class="btn sm" id="apply-range">${esc(t("pg.select"))}</button><button class="btn sm" id="sel-all">${esc(t("pg.all"))}</button><button class="btn sm" id="sel-odd">${esc(t("pg.odd"))}</button><button class="btn sm" id="sel-even">${esc(t("pg.even"))}</button><button class="btn sm ghost" id="reset">${esc(t("pg.none"))}</button>`,
     }[action];
+    const tip = { organize: "pg.tip_org", remove: "pg.tip_rm", extract: "pg.tip_ex" }[action];
     $("#app").innerHTML = `
       <div class="workspace">
         <section class="work-area">
           <div class="work-toolbar">${toolbar}<span class="spacer"></span>
             <label class="muted" style="display:flex;gap:.4rem;align-items:center;font-size:.85rem">${icon("search", 14)}<input type="range" min="100" max="300" value="${zoom}" id="zoom" style="width:110px"></label></div>
-          <p class="muted" style="margin:-.4rem 0 1rem;font-size:.85rem">${{ organize: "Glissez les pages pour les réordonner. Survolez une page pour la pivoter ou la supprimer.", remove: "Cliquez sur les pages à supprimer.", extract: "Cliquez sur les pages à extraire." }[action]}</p>
+          <p class="muted" style="margin:-.4rem 0 1rem;font-size:.85rem">${esc(t(tip))}</p>
           <div class="page-grid" id="page-grid" style="--page-w:${zoom}px"></div>
         </section>
         ${this.sidebar()}
@@ -249,9 +250,9 @@ const Workspace = {
     L.forEach((it, idx) => {
       const p = it.blank ? null : data.pages[it.src];
       const card = el(`<div class="page-card ${it.removed ? "removed" : ""} ${it.selected ? "selected" : ""}" draggable="${action === "organize"}" data-id="${it.key}">
-          <div class="card-actions">${action === "organize" ? `<button data-a="l" title="Pivoter à gauche">${icon("rotate-ccw", 14)}</button><button data-a="r" title="Pivoter à droite">${icon("rotate", 14)}</button><button data-a="d" title="Supprimer">${icon("trash", 14)}</button>` : ""}</div>
-          <div class="pthumb">${p ? `<img src="${p.src}" style="transform:rotate(${it.rot}deg) scale(${it.rot % 180 ? p.w / p.h : 1})" alt="">` : `<div class="blank-page">vierge</div>`}</div>
-          <div class="pnum">${it.blank ? "Blanche" : it.src + 1}</div>
+          <div class="card-actions">${action === "organize" ? `<button data-a="l" title="${esc(t("pg.rot_l"))}">${icon("rotate-ccw", 14)}</button><button data-a="r" title="${esc(t("pg.rot_r"))}">${icon("rotate", 14)}</button><button data-a="d" title="${esc(t("pg.del"))}">${icon("trash", 14)}</button>` : ""}</div>
+          <div class="pthumb">${p ? `<img src="${p.src}" style="transform:rotate(${it.rot}deg) scale(${it.rot % 180 ? p.w / p.h : 1})" alt="">` : `<div class="blank-page">${esc(t("pg.blank_page"))}</div>`}</div>
+          <div class="pnum">${it.blank ? esc(t("pg.blank_lbl")) : it.src + 1}</div>
         </div>`);
       if (action === "organize") {
         card.querySelector('[data-a="l"]').onclick = (e) => { e.stopPropagation(); it.rot = (it.rot + 270) % 360; redraw(); };
@@ -259,7 +260,11 @@ const Workspace = {
         card.querySelector('[data-a="d"]').onclick = (e) => { e.stopPropagation(); L.splice(idx, 1); redraw(); };
         this.makeSortable(card, L, redraw, "key");
       } else {
-        card.onclick = () => { if (action === "remove") it.removed = !it.removed; else it.selected = !it.selected; card.classList.toggle(action === "remove" ? "removed" : "selected"); upd(); };
+        card.onclick = () => {
+          if (action === "remove") it.removed = !it.removed; else it.selected = !it.selected;
+          card.classList.toggle(action === "remove" ? "removed" : "selected");
+          upd();
+        };
       }
       grid.appendChild(card);
     });
@@ -291,12 +296,13 @@ const Workspace = {
     };
     const upd = () => {
       const fl = finalLayout();
-      $("#summary").innerHTML = `<div class="summary">${action === "remove" ? `<b>${L.length - fl.length}</b> page(s) supprimée(s) · ${fl.length} restante(s)`
-        : action === "extract" ? `<b>${fl.length}</b> page(s) sélectionnée(s) sur ${L.length}` : `${fl.length} page(s) dans le document final`}</div>`;
+      const key = { remove: "pg.sum_rm", extract: "pg.sum_ex", organize: "pg.sum_org" }[action];
+      const vars = action === "remove" ? { a: L.length - fl.length, b: fl.length } : action === "extract" ? { a: fl.length, b: L.length } : { a: fl.length };
+      $("#summary").innerHTML = `<div class="summary">${t(key, vars)}</div>`;
     };
     this.bindSidebar(() => {
       const fl = finalLayout();
-      if (!fl.length) { toast(action === "extract" ? "Sélectionnez au moins une page." : "Le document ne peut pas être vide.", "error"); return null; }
+      if (!fl.length) { toast(t(action === "extract" ? "pg.need_one" : "pg.not_empty"), "error"); return null; }
       return { files: [file], opts: { layout: fl.map((x) => (x.blank ? { blank: true } : { src: x.src, rot: x.rot })) } };
     }, null);
     upd();
