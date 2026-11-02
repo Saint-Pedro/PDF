@@ -42,7 +42,7 @@ Most tools work with Python packages only. Heavier engines are used when install
 
 | Engine | Adds |
 |---|---|
-| LibreOffice | High-fidelity Office → PDF (required for PowerPoint) |
+| LibreOffice | Office → PDF for every format (required for PowerPoint, .xls, .ods); without it, XLSX/CSV use the built-in renderer and DOCX a simplified one |
 | Ghostscript | Better compression, PDF/A, vector grayscale |
 | OCRmyPDF + Tesseract | OCR |
 

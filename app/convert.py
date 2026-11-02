@@ -211,36 +211,10 @@ def docx_to_pdf_native(src: Path, out: Path, opts: dict) -> Path:
 
 
 def sheet_to_pdf_native(src: Path, out: Path, opts: dict) -> Path:
-    import csv
-    ss, body, _ = _styles()
-    small = ParagraphStyle("s", parent=body, fontSize=8, leading=10)
-    sheets: list[tuple[str, list[list]]] = []
+    from . import xlsx_render
     if ext(src) in ("csv", "tsv"):
-        txt = src.read_text("utf-8-sig", errors="replace")
-        dialect = "excel-tab" if ext(src) == "tsv" else csv.Sniffer().sniff(txt[:4000], ";,\t") if txt else "excel"
-        sheets.append((src.stem, list(csv.reader(io.StringIO(txt), dialect))))
-    else:
-        import openpyxl
-        wb = openpyxl.load_workbook(str(src), data_only=True, read_only=True)
-        for ws in wb.worksheets:
-            rows = [["" if v is None else v for v in r] for r in ws.iter_rows(values_only=True)]
-            while rows and not any(str(v).strip() for v in rows[-1]):
-                rows.pop()
-            sheets.append((ws.title, rows))
-    story = []
-    for k, (name, rows) in enumerate(sheets):
-        if k:
-            story.append(PageBreak())
-        story.append(Paragraph(html.escape(name), ss["Heading2"]))
-        if rows:
-            width = max(len(r) for r in rows)
-            data = [[Paragraph(html.escape(str(v)), small) for v in r] + [""] * (width - len(r)) for r in rows]
-            t = Table(data, repeatRows=1)
-            t.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#bbbbbb")),
-                                   ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#f1f1f1"))]))
-            story.append(t)
-    SimpleDocTemplate(str(out), pagesize=landscape(A4), leftMargin=10 * mm, rightMargin=10 * mm).build(story or [Spacer(1, 1)])
-    return out
+        return xlsx_render.csv_to_pdf(src, out)
+    return xlsx_render.xlsx_to_pdf(src, out)
 
 
 # ------------------------------------------------------------------ dispatch « vers PDF »
@@ -259,7 +233,7 @@ def to_pdf(src: Path, outdir: Path, opts: dict) -> Path:
             return engines.libreoffice_convert(src, "pdf", outdir)
         if e in ("docx", "docm", "dotx") and engines.has("docx"):
             return docx_to_pdf_native(src, out, opts)
-        if e in ("xlsx", "xlsm", "csv", "tsv") and (e in ("csv", "tsv") or engines.has("openpyxl")):
+        if e in ("xlsx", "xlsm", "xltx", "csv", "tsv"):
             return sheet_to_pdf_native(src, out, opts)
         raise RuntimeError(f"Install LibreOffice to convert .{e} files.")
     raise RuntimeError(f"Unsupported format: .{e}")
