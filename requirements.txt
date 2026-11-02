@@ -1,0 +1,15 @@
+fastapi>=0.110
+uvicorn>=0.29
+python-multipart>=0.0.9
+pypdf[crypto]>=5.0
+pypdfium2>=4.30
+pillow>=10.0
+reportlab>=4.0
+python-docx>=1.1
+openpyxl>=3.1
+python-pptx>=0.6.23
+pdfplumber>=0.11
+# Facultatif (meilleur PDF -> Word ; dépend de PyMuPDF, licence AGPL)
+pdf2docx>=0.5.8
+# Facultatif : images HEIC/HEIF (iPhone)
+pillow-heif>=0.16

@@ -1,0 +1,11 @@
+services:
+  pdfstudio:
+    build: .
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - ./data:/data          # thème, logo, polices importées
+    environment:
+      # - ADMIN_PASSWORD=changez-moi   # protège la page « Personnaliser »
+      - MAX_UPLOAD_MB=500
+    restart: unless-stopped
