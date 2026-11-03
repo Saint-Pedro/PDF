@@ -9,6 +9,7 @@ from typing import Callable
 from . import convert as cv
 from . import engines
 from . import pdfops as ops
+from . import progress
 
 
 def L(en: str, fr: str) -> dict:
@@ -39,27 +40,27 @@ Handler = Callable[[list[Path], dict, Path], "Path | list[Path]"]
 def single(fn) -> Handler:
     """Apply a file -> file operation to each PDF."""
     def h(files, o, wd):
-        return [fn(f, wd / f"{f.stem}_{o['_tool']}.pdf", o) for f in files]
+        return [fn(f, wd / f"{f.stem}_{o['_tool']}.pdf", o) for f in progress.each(files)]
     return h
 
 
 def to_pdf_each(files, o, wd):
     if o.get("merge") and len(files) > 1:
-        pdfs = [cv.to_pdf(f, wd, o) for f in files]
+        pdfs = [cv.to_pdf(f, wd, o) for f in progress.each(files)]
         return ops.merge(pdfs, wd / "merged.pdf", {})
-    return [cv.to_pdf(f, wd, o) for f in files]
+    return [cv.to_pdf(f, wd, o) for f in progress.each(files)]
 
 
 def images_handler(files, o, wd):
     if o.get("merge", True) and len(files) > 1:
         return cv.images_to_pdf(files, wd / "images.pdf", o)
-    return [cv.images_to_pdf([f], wd / f"{f.stem}.pdf", o) for f in files]
+    return [cv.images_to_pdf([f], wd / f"{f.stem}.pdf", o) for f in progress.each(files)]
 
 
 def from_pdf(fn):
     def h(files, o, wd):
         outs = []
-        for f in files:
+        for f in progress.each(files):
             r = fn(f, wd, o)
             outs += r if isinstance(r, list) else [r]
         return outs
@@ -68,12 +69,12 @@ def from_pdf(fn):
 
 def watermark_handler(files, o, wd):
     img = o.get("_image")
-    return [ops.watermark(f, wd / f"{f.stem}_watermark.pdf", o, image=img) for f in files]
+    return [ops.watermark(f, wd / f"{f.stem}_watermark.pdf", o, image=img) for f in progress.each(files)]
 
 
 def split_handler(files, o, wd):
     outs = []
-    for f in files:
+    for f in progress.each(files):
         outs += ops.split(f, wd, o)
     return outs
 

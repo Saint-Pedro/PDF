@@ -1,13 +1,10 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import re
 import secrets
-import shutil
-import tempfile
-import time
-import zipfile
 from pathlib import Path
 
 from fastapi import FastAPI, File, Form, Header, HTTPException, Request, UploadFile
@@ -17,8 +14,9 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.background import BackgroundTask
 
-from . import engines, pdfops
+from . import __version__, engines, limits
 from .i18n import translate
+from .jobs import DONE, ERROR, QUEUED, RUNNING, Job, JobManager
 from .tools import BY_ID, CATEGORIES, public_list
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -26,13 +24,28 @@ STATIC = ROOT / "static"
 DATA = Path(os.environ.get("PDFSTUDIO_DATA", ROOT / "data"))
 THEME_FILE = DATA / "theme.json"
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
-MAX_MB = int(os.environ.get("MAX_UPLOAD_MB", "500"))
 DATA.mkdir(parents=True, exist_ok=True)
+MAX_QUEUE = int(os.environ.get("MAX_QUEUE", "50"))
+_JOBS: JobManager | None = None
+
+
+def jobs() -> JobManager:
+    """Created lazily, in the server process only (spawned workers import this module too)."""
+    global _JOBS
+    if _JOBS is None:
+        _JOBS = JobManager(
+            DATA / "jobs",
+            workers=int(os.environ.get("WORKERS", max(1, min(4, (os.cpu_count() or 2) - 1)))),
+            timeout=int(os.environ.get("JOB_TIMEOUT", "900")),
+            max_queue=MAX_QUEUE,
+            ttl=int(os.environ.get("RESULT_TTL", "900")),
+        )
+    return _JOBS
 
 # Branding is hard-coded in app/branding.json; only the chosen theme preset is stored at runtime.
 BRANDING: dict = json.loads((ROOT / "app" / "branding.json").read_text("utf-8"))
 
-app = FastAPI(title="PDF Studio", docs_url="/api/docs")
+app = FastAPI(title="PDF Studio", version=__version__, docs_url="/api/docs")
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
 
@@ -79,7 +92,8 @@ def config():
         "categories": CATEGORIES,
         "engines": {k: bool(v) for k, v in engines.detect().items()},
         "admin_protected": bool(ADMIN_PASSWORD),
-        "max_mb": MAX_MB,
+        "max_mb": limits.MAX_UPLOAD_MB,
+        "version": __version__,
     }
 
 
@@ -94,10 +108,10 @@ async def save_theme(request: Request, x_admin_password: str | None = Header(Non
     return load_branding()
 
 
-# ------------------------------------------------------------------ traitement
+# ------------------------------------------------------------------ processing
 def safe_name(name: str) -> str:
-    name = Path(name or "fichier").name
-    name = re.sub(r"[^\w.\- ()À-ÿ]", "_", name).strip() or "fichier"
+    name = Path(name or "file").name
+    name = re.sub(r"[^\w.\- ()À-ÿ]", "_", name).strip() or "file"
     return name[:150]
 
 
@@ -114,15 +128,25 @@ async def store(upload: UploadFile, folder: Path, used: set[str]) -> Path:
     with dest.open("wb") as f:
         while chunk := await upload.read(1 << 20):
             size += len(chunk)
-            if size > MAX_MB * 1024 * 1024:
-                raise HTTPException(413, f"File too large (max {MAX_MB} MB).")
+            if size > limits.MAX_UPLOAD_MB * 1024 * 1024:
+                raise HTTPException(413, f"File too large (max {limits.MAX_UPLOAD_MB} MB).")
             f.write(chunk)
     return dest
 
 
-@app.post("/api/process/{tool_id}")
-async def process(tool_id: str, files: list[UploadFile] = File(...),
-                  options: str = Form("{}"), extra: UploadFile | None = File(None)):
+def job_view(job: Job, lang: str | None) -> dict:
+    prog, label = jobs().progress(job)
+    d = {"id": job.id, "tool": job.tool_id, "status": job.status, "progress": prog, "label": label,
+         "position": jobs().position(job) if job.status == QUEUED else 0}
+    if job.status == ERROR:
+        d["error"] = translate(job.error or "", lang)
+    if job.status == DONE and job.result:
+        r = job.result
+        d["result"] = {"name": r["name"], "size": r["size"], "in_size": job.in_size, "count": r["count"], "files": r["files"]}
+    return d
+
+
+async def create_job(tool_id: str, files: list[UploadFile], options: str, extra: UploadFile | None) -> Job:
     tool = BY_ID.get(tool_id)
     if not tool:
         raise HTTPException(404, "Unknown tool.")
@@ -130,70 +154,103 @@ async def process(tool_id: str, files: list[UploadFile] = File(...),
         raise HTTPException(400, f"This tool requires {tool['requires']}.")
     try:
         opts = json.loads(options or "{}")
-    except json.JSONDecodeError:
+        assert isinstance(opts, dict)
+    except Exception:
         raise HTTPException(400, "Invalid options.")
+    files = [f for f in files if f is not None and f.filename]
+    if tool.get("mode") != "url" and not files:
+        raise HTTPException(400, "No file received.")
+    if len(files) > limits.MAX_FILES:
+        raise HTTPException(400, f"Too many files (max {limits.MAX_FILES}).")
+    if jobs().pending() >= MAX_QUEUE:
+        raise HTTPException(429, "The server is busy, please try again in a moment.")
+    opts = {k: v for k, v in opts.items() if not k.startswith("_")}
     opts["_tool"] = tool_id
-
-    work = Path(tempfile.mkdtemp(prefix="pdfstudio-"))
-    cleanup = BackgroundTask(shutil.rmtree, work, ignore_errors=True)
+    jid, jdir = jobs().new_dir()
     try:
-        inp = work / "in"
-        out = work / "out"
-        inp.mkdir()
-        out.mkdir()
         used: set[str] = set()
-        paths = [await store(f, inp, used) for f in files]
+        paths = [await store(f, jdir / "in", used) for f in files]
         accept = set(tool["accept"])
         for p in paths:
             if p.suffix.lower().lstrip(".") not in accept:
                 raise HTTPException(400, f'"{p.name}" is not a format accepted by this tool.')
         if extra is not None and extra.filename:
-            opts["_image"] = await store(extra, inp, used)
-        in_size = sum(p.stat().st_size for p in paths)
-
-        result = await run_in_threadpool(tool["handler"], paths, opts, out)
-        results = result if isinstance(result, list) else [result]
-        results = [Path(r) for r in results]
-        if not results:
-            raise HTTPException(500, "No file was produced.")
-        if len(results) == 1:
-            final = results[0]
-        else:
-            final = work / f"{tool_id}_{time.strftime('%Y%m%d-%H%M%S')}.zip"
-            with zipfile.ZipFile(final, "w", zipfile.ZIP_DEFLATED) as z:
-                for r in results:
-                    z.write(r, r.name)
-        headers = {
-            "X-Input-Size": str(in_size),
-            "X-Output-Size": str(final.stat().st_size),
-            "X-File-Count": str(len(results)),
-            "Access-Control-Expose-Headers": "X-Input-Size, X-Output-Size, X-File-Count, Content-Disposition",
-        }
-        return FileResponse(final, filename=final.name, headers=headers, background=cleanup)
+            if Path(extra.filename).suffix.lower().lstrip(".") not in set(tool.get("extra_file", {}).get("accept", [])):
+                raise HTTPException(400, f'"{extra.filename}" is not a format accepted by this tool.')
+            opts["_image"] = str(await store(extra, jdir / "in", used))
+        for p in paths:
+            await run_in_threadpool(limits.check_file, p)
     except HTTPException:
-        shutil.rmtree(work, ignore_errors=True)
+        jobs().discard(jid)
         raise
-    except (ValueError, RuntimeError) as e:
-        shutil.rmtree(work, ignore_errors=True)
+    except ValueError as e:
+        jobs().discard(jid)
         raise HTTPException(400, str(e))
-    except Exception as e:  # pragma: no cover
-        shutil.rmtree(work, ignore_errors=True)
-        raise HTTPException(500, f"Unexpected error: {e}")
+    job = Job(id=jid, tool_id=tool_id, dir=jdir, inputs=[str(p) for p in paths], opts=opts,
+              in_size=sum(p.stat().st_size for p in paths))
+    jobs().submit(job)
+    return job
 
 
-@app.post("/api/preview")
-async def preview(file: UploadFile = File(...), width: int = Form(220), password: str = Form(""),
-                  max_pages: int = Form(500)):
-    work = Path(tempfile.mkdtemp(prefix="pdfstudio-prev-"))
-    try:
-        p = await store(file, work, set())
-        try:
-            data = await run_in_threadpool(pdfops.thumbnails, p, min(max(width, 60), 1400), max(1, min(max_pages, 2000)), password or None)
-        except Exception as e:
-            msg = str(e).lower()
-            if "password" in msg:
-                return JSONResponse({"error": "password"}, status_code=423)
-            raise HTTPException(400, "Unable to read this PDF.")
-        return data
-    finally:
-        shutil.rmtree(work, ignore_errors=True)
+@app.post("/api/jobs/{tool_id}")
+async def start_job(request: Request, tool_id: str, files: list[UploadFile] = File(None),
+                    options: str = Form("{}"), extra: UploadFile | None = File(None)):
+    job = await create_job(tool_id, files or [], options, extra)
+    return job_view(job, request.headers.get("x-lang"))
+
+
+@app.get("/api/jobs/{jid}")
+def job_status(request: Request, jid: str):
+    job = jobs().get(jid)
+    if not job:
+        raise HTTPException(404, "This job no longer exists (its files have been deleted).")
+    return job_view(job, request.headers.get("x-lang"))
+
+
+@app.get("/api/jobs/{jid}/result")
+def job_result(jid: str, keep: int = 0):
+    job = jobs().get(jid)
+    if not job or job.status != DONE or not job.result:
+        raise HTTPException(404, "This job no longer exists (its files have been deleted).")
+    path = Path(job.result["path"])
+    bg = None if keep else BackgroundTask(jobs().delete, jid)  # deleted right after download
+    return FileResponse(path, filename=job.result["name"], background=bg)
+
+
+@app.delete("/api/jobs/{jid}")
+def job_delete(jid: str):
+    return {"deleted": jobs().delete(jid), "stored_files": jobs().stored_files()}
+
+
+@app.get("/api/storage")
+def storage():
+    """Lets the UI prove that nothing is kept on the server."""
+    return {"jobs": len(jobs().jobs), "stored_files": jobs().stored_files()}
+
+
+@app.post("/api/process/{tool_id}")
+async def process(tool_id: str, files: list[UploadFile] = File(None),
+                  options: str = Form("{}"), extra: UploadFile | None = File(None)):
+    """Synchronous API: upload, wait, download (files are deleted afterwards)."""
+    job = await create_job(tool_id, files or [], options, extra)
+    while job.status in (QUEUED, RUNNING):
+        await asyncio.sleep(0.1)
+    if job.status != DONE:
+        err = job.error or "Unexpected error."
+        jobs().delete(job.id)
+        raise HTTPException(400, err)
+    r = job.result
+    headers = {"X-Input-Size": str(job.in_size), "X-Output-Size": str(r["size"]), "X-File-Count": str(r["count"]),
+               "Access-Control-Expose-Headers": "X-Input-Size, X-Output-Size, X-File-Count, Content-Disposition"}
+    return FileResponse(r["path"], filename=r["name"], headers=headers, background=BackgroundTask(jobs().delete, job.id))
+
+
+@app.on_event("startup")
+def _startup():
+    jobs()  # wipe leftovers from a previous crash right away
+
+
+@app.on_event("shutdown")
+def _shutdown():
+    if _JOBS is not None:
+        _JOBS.shutdown()

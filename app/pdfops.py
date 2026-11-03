@@ -18,7 +18,7 @@ from reportlab.lib.colors import HexColor
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas
 
-from . import engines
+from . import engines, progress
 
 MM = 72 / 25.4
 
@@ -120,7 +120,7 @@ def data_url_image(data_url: str) -> Image.Image:
 # ---------------------------------------------------------------- organiser
 def merge(files: list[Path], out: Path, opts: dict) -> Path:
     w = PdfWriter()
-    for f in files:
+    for f in progress.each(files):
         r = open_reader(f)
         w.append(r, outline_item=f.stem if opts.get("bookmarks") else None)
     return save(w, out)
@@ -242,7 +242,8 @@ def compress(file: Path, out: Path, opts: dict) -> Path:
     # 1) natif : ré-encodage des images + déduplication
     r = open_reader(file)
     w = PdfWriter(clone_from=r)
-    for page in w.pages:
+    for pi, page in enumerate(w.pages):
+        progress.step(pi, len(w.pages) * (1.6 if engines.detect()["ghostscript"] else 1.1))
         try:
             for img in page.images:
                 pil = img.image
@@ -332,6 +333,7 @@ def rasterize(file: Path, out: Path, opts: dict, pages: set[int] | None = None,
     src = open_reader(file)
     w = PdfWriter()
     for i in range(len(doc)):
+        progress.step(i, len(doc))
         if pages is not None and i not in pages:
             w.add_page(src.pages[i])
             continue

@@ -13,14 +13,13 @@ from pathlib import Path
 import pypdfium2 as pdfium
 from PIL import Image, ImageOps
 from reportlab.lib import colors
-from reportlab.lib.enums import TA_LEFT
 from reportlab.lib.pagesizes import A4, A3, A5, letter, landscape
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
 from reportlab.platypus import (Paragraph, Preformatted, SimpleDocTemplate, Spacer, Table,
-                                TableStyle, ListFlowable, ListItem, PageBreak)
+                                TableStyle, ListFlowable, ListItem)
 
-from . import engines
+from . import engines, progress
 from .pdfops import open_reader, pdfium_safe
 
 try:  # HEIC/HEIF si pillow-heif est installé
@@ -55,7 +54,8 @@ def images_to_pdf(files: list[Path], out: Path, opts: dict) -> Path:
     orient = opts.get("orientation", "auto")
     margin = {"none": 0, "small": 10 * mm, "big": 25 * mm}.get(opts.get("margin", "none"), 0)
     c = canvas.Canvas(str(out))
-    for f in files:
+    for fi, f in enumerate(files):
+        progress.step(fi, len(files))
         img = Image.open(f)
         frames = []
         try:
@@ -231,8 +231,12 @@ def to_pdf(src: Path, outdir: Path, opts: dict) -> Path:
     if e in OFFICE_EXT:
         if engines.has("libreoffice"):
             return engines.libreoffice_convert(src, "pdf", outdir)
-        if e in ("docx", "docm", "dotx") and engines.has("docx"):
-            return docx_to_pdf_native(src, out, opts)
+        if e in ("docx", "docm", "dotx"):
+            from . import docx_render
+            try:
+                return docx_render.docx_to_pdf(src, out)
+            except Exception:  # unusual document: simplified rendering rather than nothing
+                return docx_to_pdf_native(src, out, opts)
         if e in ("xlsx", "xlsm", "xltx", "csv", "tsv"):
             return sheet_to_pdf_native(src, out, opts)
         raise RuntimeError(f"Install LibreOffice to convert .{e} files.")
@@ -262,6 +266,7 @@ def pdf_to_images(src: Path, outdir: Path, opts: dict) -> list[Path]:
             raise ValueError("No images found in this PDF.")
         return outs
     for i in range(len(doc)):
+        progress.step(i, len(doc))
         img = doc[i].render(scale=dpi / 72).to_pil()
         p = outdir / f"{src.stem}_{i+1:03d}.{fmt}"
         if fmt == "png":
@@ -308,6 +313,7 @@ def pdf_to_pptx(src: Path, outdir: Path, opts: dict) -> Path:
     prs.slide_height = Emu(int(h0 * 12700))
     blank = prs.slide_layouts[6]
     for i in range(len(doc)):
+        progress.step(i, len(doc))
         img = doc[i].render(scale=2).to_pil().convert("RGB")
         buf = io.BytesIO()
         img.save(buf, "JPEG", quality=88)
