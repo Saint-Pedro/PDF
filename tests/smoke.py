@@ -35,7 +35,15 @@ def main():
     (tmp / "p.html").write_text("<h1>Hello</h1><p>Monde</p>")
     from pptx import Presentation; pr = Presentation(); pr.slides.add_slide(pr.slide_layouts[0]).shapes.title.text = "Hi"; pr.save(tmp / "s.pptx")
 
+    # tiny local web server for "Web page to PDF"
+    import functools, http.server, threading
+    (tmp / "site").mkdir()
+    (tmp / "site" / "index.html").write_text("<h1>Hello</h1><p>Local page</p>")
+    srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), functools.partial(http.server.SimpleHTTPRequestHandler, directory=str(tmp / "site")))
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    OPTS_URL = {"url": f"http://127.0.0.1:{srv.server_address[1]}/index.html"}
     INPUTS = {
+        "url_to_pdf": [],
         "merge": [pdf1, pdf2], "img_to_pdf": [png, jpg], "word_to_pdf": [tmp / "doc.docx"],
         "excel_to_pdf": [tmp / "t.xlsx"], "ppt_to_pdf": [tmp / "s.pptx"], "html_to_pdf": [tmp / "n.md", tmp / "p.html"],
         "any_to_pdf": [png, tmp / "doc.docx", tmp / "n.md"],
@@ -59,6 +67,8 @@ def main():
         if t.get("requires") and not engines.has(t["requires"]):
             print(f"SKIP {t['id']} (requires {t['requires']})"); continue
         files = INPUTS.get(t["id"], [pdf1])
+        if t["id"] == "url_to_pdf":
+            OPTS["url_to_pdf"] = OPTS_URL
         opts = {o["name"]: o.get("default") for o in t.get("options", []) if "default" in o}
         opts.update(OPTS.get(t["id"], {}))
         r = c.post(f"/api/process/{t['id']}", files=[("files", (f.name, f.read_bytes())) for f in files], data={"options": json.dumps(opts)})

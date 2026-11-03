@@ -1,0 +1,4 @@
+# Extra dependencies for the desktop application build
+-r requirements.txt
+pyinstaller>=6.10
+pywebview>=5.0

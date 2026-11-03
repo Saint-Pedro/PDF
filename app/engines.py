@@ -1,5 +1,5 @@
-"""Détection des moteurs externes facultatifs (idée reprise de Filee :
-le cœur fonctionne en natif, les moteurs lourds ne servent qu'en bonus)."""
+"""Detection of optional external engines (idea taken from Filee: the core
+works with built-in code, heavy engines are only a bonus)."""
 from __future__ import annotations
 
 import importlib.util
@@ -16,7 +16,7 @@ def _which(*names: str) -> str | None:
         p = shutil.which(n)
         if p:
             return p
-    # Emplacements courants Windows / macOS pour LibreOffice
+    # Usual LibreOffice locations on Windows / macOS
     for p in (
         r"C:\Program Files\LibreOffice\program\soffice.exe",
         r"C:\Program Files (x86)\LibreOffice\program\soffice.exe",
@@ -67,8 +67,8 @@ def run(cmd: list[str], timeout: int = 300) -> subprocess.CompletedProcess:
 
 
 def libreoffice_convert(src: Path, fmt: str, outdir: Path, infilter: str | None = None) -> Path:
-    """Convertit avec LibreOffice headless. Profil isolé pour pouvoir lancer
-    plusieurs conversions en parallèle sans conflit de verrou."""
+    """Convert with headless LibreOffice. A separate profile per call allows
+    several conversions in parallel without lock conflicts."""
     soffice = detect()["libreoffice"]
     if not soffice:
         raise RuntimeError("LibreOffice is not installed.")

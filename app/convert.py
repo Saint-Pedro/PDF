@@ -1,8 +1,8 @@
-"""Conversions vers / depuis PDF.
+"""Conversions to / from PDF.
 
-Stratégie (inspirée de Filee) : moteur natif d'abord quand il donne un bon
-résultat, moteur externe (LibreOffice, pdf2docx…) quand il est installé et plus
-fidèle, et repli natif sinon — l'appli reste utilisable sans rien installer."""
+Strategy (inspired by Filee): built-in engine first when it gives a good
+result, external engine (LibreOffice, pdf2docx…) when installed and more
+faithful, built-in fallback otherwise — the app works without installing anything."""
 from __future__ import annotations
 
 import html
@@ -22,7 +22,7 @@ from reportlab.platypus import (Paragraph, Preformatted, SimpleDocTemplate, Spac
 from . import engines, progress
 from .pdfops import open_reader, pdfium_safe
 
-try:  # HEIC/HEIF si pillow-heif est installé
+try:  # HEIC/HEIF when pillow-heif is installed
     import pillow_heif  # type: ignore
     pillow_heif.register_heif_opener()
 except Exception:
@@ -63,7 +63,7 @@ def images_to_pdf(files: list[Path], out: Path, opts: dict) -> Path:
                 img.seek(k)
                 frames.append(ImageOps.exif_transpose(img.copy()))
                 if ext(f) in ("gif", "webp"):
-                    break  # 1re image pour les animations
+                    break  # first frame only for animations
         except EOFError:
             pass
         for fr in frames or [img]:
@@ -92,7 +92,7 @@ def images_to_pdf(files: list[Path], out: Path, opts: dict) -> Path:
     return out
 
 
-# ------------------------------------------------------------------ texte / markdown natif
+# ------------------------------------------------------------------ text / markdown (built-in)
 def _styles():
     ss = getSampleStyleSheet()
     body = ParagraphStyle("body", parent=ss["BodyText"], fontName="Helvetica", fontSize=10.5, leading=15)
@@ -173,7 +173,7 @@ def text_to_pdf(src: Path, out: Path, opts: dict) -> Path:
     return out
 
 
-# ------------------------------------------------------------------ replis natifs Office
+# ------------------------------------------------------------------ simple Office fallbacks
 def docx_to_pdf_native(src: Path, out: Path, opts: dict) -> Path:
     import docx  # python-docx
 
@@ -217,7 +217,7 @@ def sheet_to_pdf_native(src: Path, out: Path, opts: dict) -> Path:
     return xlsx_render.xlsx_to_pdf(src, out)
 
 
-# ------------------------------------------------------------------ dispatch « vers PDF »
+# ------------------------------------------------------------------ to PDF dispatch
 def to_pdf(src: Path, outdir: Path, opts: dict) -> Path:
     e = ext(src)
     out = outdir / f"{src.stem}.pdf"
@@ -246,14 +246,14 @@ def to_pdf(src: Path, outdir: Path, opts: dict) -> Path:
     raise RuntimeError(f"Unsupported format: .{e}")
 
 
-# ------------------------------------------------------------------ depuis PDF
+# ------------------------------------------------------------------ from PDF
 @pdfium_safe
 def pdf_to_images(src: Path, outdir: Path, opts: dict) -> list[Path]:
     fmt = opts.get("format", "jpg")
     dpi = int(opts.get("dpi", 150))
     doc = pdfium.PdfDocument(str(src))
     outs = []
-    if opts.get("mode") == "extract":  # extraire les images embarquées
+    if opts.get("mode") == "extract":  # extract embedded images
         r = open_reader(src)
         k = 0
         for pi, page in enumerate(r.pages):
@@ -345,7 +345,7 @@ def pdf_to_xlsx(src: Path, outdir: Path, opts: dict) -> Path:
                     for row in table:
                         ws.append([(c or "").strip() for c in row])
                     found = True
-    if not found:  # repli : une ligne par ligne de texte, colonnes sur espaces multiples
+    if not found:  # fallback: one row per text line, columns split on multiple spaces
         ws = wb.create_sheet("Texte")
         for page in open_reader(src).pages:
             for ln in (page.extract_text() or "").splitlines():

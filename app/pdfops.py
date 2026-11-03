@@ -1,4 +1,4 @@
-"""Opérations PDF natives (pypdf + pypdfium2 + reportlab + Pillow)."""
+"""Built-in PDF operations (pypdf + pypdfium2 + reportlab + Pillow)."""
 from __future__ import annotations
 
 import base64
@@ -22,7 +22,7 @@ from . import engines, progress
 
 MM = 72 / 25.4
 
-# PDFium n'est pas thread-safe : tout accès passe par ce verrou.
+# PDFium is not thread-safe: every access goes through this lock.
 PDFIUM_LOCK = threading.RLock()
 
 
@@ -34,7 +34,7 @@ def pdfium_safe(fn):
     return wrapper
 
 
-# ---------------------------------------------------------------- utilitaires
+# ---------------------------------------------------------------- helpers
 def parse_ranges(spec: str, total: int) -> list[list[int]]:
     """'1-3, 5, 8-' -> [[0,1,2],[4],[7..total-1]] (indices base 0)."""
     groups: list[list[int]] = []
@@ -94,8 +94,8 @@ def hex_color(c: str, default: str = "#000000") -> HexColor:
 
 def overlay_pages(writer: PdfWriter, pages: list[int] | None,
                   draw: Callable[[canvas.Canvas, float, float, int, int], None]) -> None:
-    """Dessine par-dessus chaque page via reportlab, en tenant compte de la
-    rotation et de l'origine de la MediaBox."""
+    """Draw over each page with reportlab, taking the page rotation and the
+    MediaBox origin into account."""
     total = len(writer.pages)
     targets = range(total) if pages is None else pages
     for i in targets:
@@ -117,7 +117,7 @@ def data_url_image(data_url: str) -> Image.Image:
     return Image.open(io.BytesIO(base64.b64decode(b64)))
 
 
-# ---------------------------------------------------------------- organiser
+# ---------------------------------------------------------------- organize
 def merge(files: list[Path], out: Path, opts: dict) -> Path:
     w = PdfWriter()
     for f in progress.each(files):
@@ -175,7 +175,7 @@ def extract_pages(file: Path, out: Path, opts: dict) -> Path:
 
 
 def organize(file: Path, out: Path, opts: dict) -> Path:
-    """opts['layout'] = [{"src": 0, "rot": 90}, ...] produit par l'éditeur de pages."""
+    """opts['layout'] = [{"src": 0, "rot": 90}, ...] produced by the page editor."""
     layout = opts.get("layout") or []
     n = len(open_reader(file).pages)
     if not layout:
@@ -229,7 +229,7 @@ def nup(file: Path, out: Path, opts: dict) -> Path:
     return save(w, out)
 
 
-# ---------------------------------------------------------------- optimiser
+# ---------------------------------------------------------------- optimize
 def compress(file: Path, out: Path, opts: dict) -> Path:
     level = opts.get("level", "recommended")
     quality, max_px, gs_preset = {
@@ -239,7 +239,7 @@ def compress(file: Path, out: Path, opts: dict) -> Path:
     }.get(level, (65, 1700, "/ebook"))
     candidates: list[Path] = []
 
-    # 1) natif : ré-encodage des images + déduplication
+    # 1) built-in: re-encode images + deduplicate objects
     r = open_reader(file)
     w = PdfWriter(clone_from=r)
     for pi, page in enumerate(w.pages):
@@ -255,7 +255,7 @@ def compress(file: Path, out: Path, opts: dict) -> Path:
                     pil = pil.convert("RGB")
                 img.replace(pil, quality=quality)
         except Exception:
-            pass  # image exotique : on la garde telle quelle
+            pass  # unusual image: keep it as is
         try:
             page.compress_content_streams()
         except Exception:
@@ -265,7 +265,7 @@ def compress(file: Path, out: Path, opts: dict) -> Path:
     save(w, native)
     candidates.append(native)
 
-    # 2) Ghostscript si disponible (souvent bien meilleur)
+    # 2) Ghostscript when available (often much better)
     gs = engines.detect()["ghostscript"]
     if gs:
         g = out.with_name(out.stem + ".gs.pdf")
@@ -326,7 +326,7 @@ def pdfa(file: Path, out: Path, opts: dict) -> Path:
 @pdfium_safe
 def rasterize(file: Path, out: Path, opts: dict, pages: set[int] | None = None,
               mutate: Callable[[Image.Image, int, float], None] | None = None) -> Path:
-    """Transforme des pages en images (aplatir, niveaux de gris, caviardage réel)."""
+    """Turn pages into images (flatten, grayscale, true redaction)."""
     dpi = int(opts.get("dpi", 150))
     gray = bool(opts.get("grayscale"))
     doc = pdfium.PdfDocument(str(file))
@@ -371,7 +371,7 @@ def flatten(file: Path, out: Path, opts: dict) -> Path:
     return rasterize(file, out, opts)
 
 
-# ---------------------------------------------------------------- modifier
+# ---------------------------------------------------------------- edit
 POSITIONS = {
     "bottom-center": ("c", "b"), "bottom-right": ("r", "b"), "bottom-left": ("l", "b"),
     "top-center": ("c", "t"), "top-right": ("r", "t"), "top-left": ("l", "t"),
@@ -481,9 +481,9 @@ def metadata(file: Path, out: Path, opts: dict) -> Path:
 
 
 def edit(file: Path, out: Path, opts: dict) -> Path:
-    """Ajoute textes / images / signatures positionnés dans l'éditeur.
-    items: [{type:'text'|'image', page, x, y, w, h (fractions 0-1 depuis le coin haut-gauche),
-             text, size (fraction de la hauteur), color, src (dataURL)}]"""
+    """Add texts / images / signatures placed in the editor.
+    items: [{type:'text'|'image'|'rect', page, x, y, w, h (fractions 0-1 from the top-left corner),
+             text, size (fraction of the page height), color, src (dataURL)}]"""
     items = opts.get("items") or []
     if not items:
         raise ValueError("Add at least one element to the document.")
@@ -520,8 +520,8 @@ def edit(file: Path, out: Path, opts: dict) -> Path:
 
 @pdfium_safe
 def redact(file: Path, out: Path, opts: dict) -> Path:
-    """Caviardage réel : recherche des termes, boîtes noires, puis la page
-    touchée est convertie en image (le texte disparaît vraiment)."""
+    """True redaction: find the terms, draw black boxes, then turn affected
+    pages into images (the text is really gone)."""
     terms = [t.strip() for t in re.split(r"[\n,;]", opts.get("terms", "")) if t.strip()]
     areas = opts.get("items") or []
     if not terms and not areas:
@@ -559,7 +559,7 @@ def redact(file: Path, out: Path, opts: dict) -> Path:
     return rasterize(file, out, {"dpi": opts.get("dpi", 200)}, pages=set(hits), mutate=mutate)
 
 
-# ---------------------------------------------------------------- sécurité
+# ---------------------------------------------------------------- security
 def protect(file: Path, out: Path, opts: dict) -> Path:
     pw = opts.get("password") or ""
     if len(pw) < 1:
@@ -587,7 +587,7 @@ def unlock(file: Path, out: Path, opts: dict) -> Path:
     return save(w, out)
 
 
-# ---------------------------------------------------------------- aperçus
+# ---------------------------------------------------------------- previews
 @pdfium_safe
 def thumbnails(file: Path, width: int = 220, max_pages: int = 400, password: str | None = None) -> dict:
     doc = pdfium.PdfDocument(str(file), password=password)
