@@ -31,6 +31,11 @@ def _module(name: str) -> bool:
     return importlib.util.find_spec(name) is not None
 
 
+def _browser():
+    from .webpdf import find_browser
+    return find_browser()
+
+
 @lru_cache(maxsize=1)
 def detect() -> dict[str, str | bool | None]:
     return {
@@ -45,6 +50,7 @@ def detect() -> dict[str, str | bool | None]:
         "openpyxl": _module("openpyxl"),
         "markdown": _module("markdown"),
         "heif": _module("pillow_heif"),
+        "browser": _browser(),
     }
 
 

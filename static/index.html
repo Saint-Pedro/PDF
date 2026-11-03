@@ -6,20 +6,25 @@
   <meta name="theme-color" content="#e5322d">
   <title>{{TITLE}}</title>
   <link rel="icon" href="{{FAVICON}}" id="favicon">
+  <link rel="apple-touch-icon" href="/static/img/mascot-180.png">
+  <link rel="manifest" href="/manifest.webmanifest">
   <script>window.__BRANDING__ = {{BRANDING}};</script>
-  <script src="/static/js/i18n.js"></script>
-  <script src="/static/js/theme.js"></script>
-  <link rel="stylesheet" href="/static/css/app.css">
+  <script src="/static/js/i18n.js?v={{VERSION}}"></script>
+  <script src="/static/js/theme.js?v={{VERSION}}"></script>
+  <link rel="stylesheet" href="/static/css/app.css?v={{VERSION}}">
 </head>
 <body>
   <header class="topbar" id="topbar"></header>
-  <main id="app"></main>
+  <main id="app" tabindex="-1"><div class="boot"><div class="mascot-spin"><img class="mascot" src="/static/img/mascot.png" alt="" width="96" height="96"></div></div></main>
   <footer class="footer" id="footer"></footer>
-  <div class="toast-zone" id="toasts"></div>
-  <script src="/static/js/icons.js"></script>
-  <script src="/static/js/app.js"></script>
-  <script src="/static/js/workspace.js"></script>
-  <script src="/static/js/editor.js"></script>
-  <script src="/static/js/customize.js"></script>
+  <div class="toast-zone" id="toasts" aria-live="polite"></div>
+  <div class="sr" id="sr-live" aria-live="assertive" aria-atomic="true"></div>
+  <script src="/static/js/icons.js?v={{VERSION}}"></script>
+  <script src="/static/js/pdfview.js?v={{VERSION}}"></script>
+  <script src="/static/js/clientops.js?v={{VERSION}}"></script>
+  <script src="/static/js/app.js?v={{VERSION}}"></script>
+  <script src="/static/js/workspace.js?v={{VERSION}}"></script>
+  <script src="/static/js/editor.js?v={{VERSION}}"></script>
+  <script src="/static/js/customize.js?v={{VERSION}}"></script>
 </body>
 </html>

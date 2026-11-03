@@ -78,10 +78,39 @@ def index(_any: str = ""):
     b = load_branding()
     html = (STATIC / "index.html").read_text("utf-8")
     esc = lambda s: (s or "").replace("&", "&amp;").replace("<", "&lt;").replace('"', "&quot;")
-    html = (html.replace("{{TITLE}}", esc(b.get("name")))
+    html = (html.replace("{{TITLE}}", esc(b.get("name"))).replace("{{VERSION}}", __version__)
                 .replace("{{FAVICON}}", esc(b.get("favicon") or b.get("logo") or "/static/img/favicon.svg"))
                 .replace("{{BRANDING}}", json.dumps(b).replace("</", "<\\/")))
     return HTMLResponse(html)
+
+
+@app.get("/sw.js")
+def service_worker():
+    return FileResponse(STATIC / "sw.js", media_type="application/javascript",
+                        headers={"Service-Worker-Allowed": "/", "Cache-Control": "no-cache"})
+
+
+@app.get("/manifest.webmanifest")
+def manifest():
+    b = load_branding()
+    return JSONResponse({
+        "name": b.get("name", "PDF Studio"), "short_name": b.get("name", "PDF Studio"),
+        "description": (b.get("tagline") or {}).get("en", "") if isinstance(b.get("tagline"), dict) else b.get("tagline", ""),
+        "start_url": "/", "scope": "/", "display": "standalone",
+        "background_color": b.get("colors", {}).get("bg", "#ffffff"), "theme_color": b.get("colors", {}).get("primary", "#e5322d"),
+        "icons": [
+            {"src": "/static/img/mascot-192.png", "sizes": "192x192", "type": "image/png"},
+            {"src": "/static/img/mascot.png", "sizes": "512x512", "type": "image/png"},
+            {"src": "/static/img/mascot-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"},
+        ],
+    }, media_type="application/manifest+json")
+
+
+@app.get("/api/changelog")
+def changelog():
+    f = ROOT / "CHANGELOG.md"
+    from fastapi.responses import PlainTextResponse
+    return PlainTextResponse(f.read_text("utf-8") if f.exists() else "")
 
 
 @app.get("/api/config")

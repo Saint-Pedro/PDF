@@ -228,6 +228,9 @@ def to_pdf(src: Path, outdir: Path, opts: dict) -> Path:
         return images_to_pdf([src], out, opts)
     if e in TEXT_EXT:
         return text_to_pdf(src, out, opts)
+    if e in HTML_EXT and engines.has("browser"):
+        from . import webpdf
+        return webpdf.render(str(src), out, {"render": "print", "margin": "small"})
     if e in OFFICE_EXT:
         if engines.has("libreoffice"):
             return engines.libreoffice_convert(src, "pdf", outdir)

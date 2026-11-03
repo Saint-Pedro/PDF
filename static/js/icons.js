@@ -1,5 +1,10 @@
-/* Icônes au trait (style Lucide, licence ISC) */
+/* Line icons (Lucide style, ISC license) */
 const ICON_PATHS = {
+  cursor: '<path d="M4.04 4.04a.5.5 0 0 1 .54-.11l15.5 6.06a.5.5 0 0 1-.05.95l-6.4 1.73a1 1 0 0 0-.7.7l-1.73 6.4a.5.5 0 0 1-.95.05L4.15 4.58a.5.5 0 0 1-.11-.54z"/>',
+  redo: '<path d="M21 7v6h-6"/><path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3l3 2.7"/>',
+  refresh: '<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>',
+  globe: '<circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/>',
+  pdf: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h1.5a1.5 1.5 0 0 1 0 3H8v-3z" /><path d="M8 16v2"/><path d="M13 13v5h1a2 2 0 0 0 2-2v-1a2 2 0 0 0-2-2z"/>',
   merge: '<path d="M8 6h8"/><path d="M8 18h8"/><path d="M4 4v16"/><path d="M20 4v16"/><path d="m10 9 2 3-2 3"/><path d="m14 9-2 3 2 3"/>',
   split: '<path d="M16 3h5v5"/><path d="M8 3H3v5"/><path d="M12 22v-8.3a4 4 0 0 0-1.17-2.83L3 3"/><path d="m15 9 6-6"/>',
   grid: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/>',

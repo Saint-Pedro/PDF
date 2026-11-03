@@ -1,6 +1,6 @@
 """Declarative tool registry. Each tool describes its options and the
 frontend builds the form automatically. To add a tool, add an entry here.
-User-facing texts are bilingual: L("English", "Français")."""
+User-facing texts are bilingual: "English"."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -12,21 +12,17 @@ from . import pdfops as ops
 from . import progress
 
 
-def L(en: str, fr: str) -> dict:
-    return {"en": en, "fr": fr}
-
-
 CATEGORIES = [
-    {"id": "organize", "label": L("Organize", "Organiser")},
-    {"id": "optimize", "label": L("Optimize", "Optimiser")},
-    {"id": "to_pdf", "label": L("Convert to PDF", "Convertir en PDF")},
-    {"id": "from_pdf", "label": L("Convert from PDF", "Convertir depuis PDF")},
-    {"id": "edit", "label": L("Edit", "Modifier")},
-    {"id": "security", "label": L("Security", "Sécurité")},
+    {"id": "organize", "label": "Organize"},
+    {"id": "optimize", "label": "Optimize"},
+    {"id": "to_pdf", "label": "Convert to PDF"},
+    {"id": "from_pdf", "label": "Convert from PDF"},
+    {"id": "edit", "label": "Edit"},
+    {"id": "security", "label": "Security"},
 ]
 
-RANGE_HINT = L("e.g. 1-3, 5, 8-", "Ex. : 1-3, 5, 8-")
-PAGES_ALL = L("Pages (empty = all)", "Pages (vide = toutes)")
+RANGE_HINT = "e.g. 1-3, 5, 8-"
+PAGES_ALL = "Pages (empty = all)"
 
 
 def opt(name, type_, label, **kw):
@@ -72,6 +68,13 @@ def watermark_handler(files, o, wd):
     return [ops.watermark(f, wd / f"{f.stem}_watermark.pdf", o, image=img) for f in progress.each(files)]
 
 
+def url_handler(o, wd):
+    from . import webpdf
+    url = webpdf.normalize_url(o.get("url", ""))
+    host = (url.split("://", 1)[1].split("/")[0] or "page").replace(":", "_")
+    return webpdf.render(url, wd / f"{host}.pdf", o)
+
+
 def split_handler(files, o, wd):
     outs = []
     for f in progress.each(files):
@@ -82,192 +85,207 @@ def split_handler(files, o, wd):
 TOOLS: list[dict] = [
     # ---------------------------------------------------------- Organize
     dict(id="merge", cat="organize", icon="merge", color="#e5322d",
-         title=L("Merge PDF", "Fusionner PDF"), desc=L("Combine several PDFs in the order you want.", "Combinez plusieurs PDF dans l'ordre de votre choix."),
+         title="Merge PDF", desc="Combine several PDFs in the order you want.",
          accept=["pdf"], multiple=True, min_files=2, mode="files",
-         options=[opt("bookmarks", "checkbox", L("Add a bookmark per file", "Créer un signet par fichier"), default=False)],
+         options=[opt("bookmarks", "checkbox", "Add a bookmark per file", default=False)],
          handler=lambda files, o, wd: ops.merge(files, wd / "merged.pdf", o)),
     dict(id="split", cat="organize", icon="split", color="#e5322d",
-         title=L("Split PDF", "Diviser PDF"), desc=L("Split a PDF by ranges, every N pages or page by page.", "Séparez un PDF par plages, toutes les N pages ou page par page."),
+         title="Split PDF", desc="Split a PDF by ranges, every N pages or page by page.",
          accept=["pdf"], multiple=False, mode="files",
-         options=[opt("mode", "select", L("Mode", "Mode"), default="ranges", choices=[
-             ["ranges", L("By ranges", "Par plages")], ["every", L("Every N pages", "Toutes les N pages")], ["each", L("Every page", "Chaque page")]]),
-             opt("ranges", "text", L("Ranges", "Plages"), default="1-2", hint=RANGE_HINT, show_if={"mode": "ranges"}),
-             opt("merge_output", "checkbox", L("Merge ranges into one PDF", "Fusionner les plages en un seul PDF"), show_if={"mode": "ranges"}),
-             opt("every", "number", L("Number of pages", "Nombre de pages"), default=1, min=1, show_if={"mode": "every"})],
+         options=[opt("mode", "select", "Mode", default="ranges", choices=[
+             ["ranges", "By ranges"], ["every", "Every N pages"], ["each", "Every page"]]),
+             opt("ranges", "text", "Ranges", default="1-2", hint=RANGE_HINT, show_if={"mode": "ranges"}),
+             opt("merge_output", "checkbox", "Merge ranges into one PDF", show_if={"mode": "ranges"}),
+             opt("every", "number", "Number of pages", default=1, min=1, show_if={"mode": "every"})],
          handler=split_handler),
     dict(id="organize", cat="organize", icon="grid", color="#e5322d",
-         title=L("Organize PDF", "Organiser PDF"), desc=L("Reorder, rotate, delete or add pages.", "Réordonnez, faites pivoter, supprimez ou ajoutez des pages."),
+         title="Organize PDF", desc="Reorder, rotate, delete or add pages.",
          accept=["pdf"], multiple=False, mode="pages",
          options=[], handler=single(ops.organize)),
     dict(id="remove", cat="organize", icon="trash", color="#e5322d",
-         title=L("Remove pages", "Supprimer des pages"), desc=L("Delete the pages you don't need.", "Retirez les pages inutiles de votre PDF."),
+         title="Remove pages", desc="Delete the pages you don't need.",
          accept=["pdf"], multiple=False, mode="pages", page_action="remove",
          options=[], handler=single(ops.organize)),
     dict(id="extract", cat="organize", icon="extract", color="#e5322d",
-         title=L("Extract pages", "Extraire des pages"), desc=L("Create a new PDF with only the pages you want.", "Créez un nouveau PDF avec seulement les pages voulues."),
+         title="Extract pages", desc="Create a new PDF with only the pages you want.",
          accept=["pdf"], multiple=False, mode="pages", page_action="extract",
          options=[], handler=single(ops.organize)),
     dict(id="rotate", cat="organize", icon="rotate", color="#a855f7",
-         title=L("Rotate PDF", "Faire pivoter PDF"), desc=L("Rotate all pages or just some of them.", "Tournez toutes les pages ou seulement certaines."),
+         title="Rotate PDF", desc="Rotate all pages or just some of them.",
          accept=["pdf"], multiple=True, mode="files",
-         options=[opt("angle", "select", L("Rotation", "Rotation"), default="90", choices=[
-             ["90", L("90° right", "90° à droite")], ["180", "180°"], ["270", L("90° left", "90° à gauche")]]),
+         options=[opt("angle", "select", "Rotation", default="90", choices=[
+             ["90", "90° right"], ["180", "180°"], ["270", "90° left"]]),
              opt("pages", "text", PAGES_ALL, default="", hint=RANGE_HINT)],
          handler=single(ops.rotate)),
     dict(id="nup", cat="organize", icon="layout", color="#a855f7",
-         title=L("Pages per sheet", "Plusieurs pages par feuille"), desc=L("Print 2, 4, 6 or 9 pages on a single sheet.", "Imprimez 2, 4, 6 ou 9 pages sur une seule feuille."),
+         title="Pages per sheet", desc="Print 2, 4, 6 or 9 pages on a single sheet.",
          accept=["pdf"], multiple=True, mode="files",
-         options=[opt("per_sheet", "select", L("Pages per sheet", "Pages par feuille"), default="2",
+         options=[opt("per_sheet", "select", "Pages per sheet", default="2",
                       choices=[["2", "2"], ["4", "4"], ["6", "6"], ["9", "9"]])],
          handler=single(ops.nup)),
 
     # ---------------------------------------------------------- Optimize
     dict(id="compress", cat="optimize", icon="compress", color="#22a06b",
-         title=L("Compress PDF", "Compresser PDF"), desc=L("Reduce file size while keeping good quality.", "Réduisez la taille tout en gardant une bonne qualité."),
+         title="Compress PDF", desc="Reduce file size while keeping good quality.",
          accept=["pdf"], multiple=True, mode="files",
-         options=[opt("level", "cards", L("Compression level", "Niveau de compression"), default="recommended", choices=[
-             ["extreme", L("Extreme", "Extrême"), L("Smallest size, lower quality", "Taille minimale, qualité réduite")],
-             ["recommended", L("Recommended", "Recommandée"), L("Good balance of size and quality", "Bon équilibre taille / qualité")],
-             ["low", L("Low", "Faible"), L("High quality, light compression", "Haute qualité, compression légère")]])],
+         options=[opt("level", "cards", "Compression level", default="recommended", choices=[
+             ["extreme", "Extreme", "Smallest size, lower quality"],
+             ["recommended", "Recommended", "Good balance of size and quality"],
+             ["low", "Low", "High quality, light compression"]])],
          handler=single(ops.compress)),
     dict(id="repair", cat="optimize", icon="wrench", color="#22a06b",
-         title=L("Repair PDF", "Réparer PDF"), desc=L("Try to recover a damaged PDF.", "Tentez de récupérer un PDF endommagé."),
+         title="Repair PDF", desc="Try to recover a damaged PDF.",
          accept=["pdf"], multiple=True, mode="files", options=[], handler=single(ops.repair)),
     dict(id="ocr", cat="optimize", icon="scan", color="#22a06b", requires="ocrmypdf",
-         title=L("OCR PDF", "OCR PDF"), desc=L("Make a scanned PDF searchable and selectable.", "Rendez un PDF scanné recherchable et copiable."),
+         title="OCR PDF", desc="Make a scanned PDF searchable and selectable.",
          accept=["pdf"], multiple=True, mode="files",
-         options=[opt("lang", "select", L("Document language", "Langue du document"), default="eng+fra", choices=[
-             ["eng+fra", L("English + French", "Anglais + français")], ["eng", L("English", "Anglais")], ["fra", L("French", "Français")],
-             ["deu", L("German", "Allemand")], ["spa", L("Spanish", "Espagnol")], ["ita", L("Italian", "Italien")]])],
+         options=[opt("lang", "select", "Document language", default="eng+fra", choices=[
+             ["eng+fra", "English + French"], ["eng", "English"], ["fra", "French"],
+             ["deu", "German"], ["spa", "Spanish"], ["ita", "Italian"]])],
          handler=single(ops.ocr)),
     dict(id="pdfa", cat="optimize", icon="archive", color="#22a06b", requires="ghostscript",
-         title=L("PDF to PDF/A", "PDF en PDF/A"), desc=L("Long-term archiving format (ISO 19005).", "Format d'archivage longue durée (ISO 19005)."),
+         title="PDF to PDF/A", desc="Long-term archiving format (ISO 19005).",
          accept=["pdf"], multiple=True, mode="files",
-         options=[opt("level", "select", L("Level", "Niveau"), default="2", choices=[["1", "PDF/A-1b"], ["2", "PDF/A-2b"], ["3", "PDF/A-3b"]])],
+         options=[opt("level", "select", "Level", default="2", choices=[["1", "PDF/A-1b"], ["2", "PDF/A-2b"], ["3", "PDF/A-3b"]])],
          handler=single(ops.pdfa)),
     dict(id="grayscale", cat="optimize", icon="contrast", color="#22a06b",
-         title=L("Grayscale PDF", "Niveaux de gris"), desc=L("Convert a color PDF to black and white.", "Convertissez un PDF couleur en noir et blanc."),
+         title="Grayscale PDF", desc="Convert a color PDF to black and white.",
          accept=["pdf"], multiple=True, mode="files", options=[], handler=single(ops.grayscale)),
 
     # ---------------------------------------------------------- Convert to PDF
-    dict(id="any_to_pdf", cat="to_pdf", icon="magic", color="#f59e0b",
-         title=L("Anything to PDF", "Tout en PDF"), desc=L("Images, Office, text, Markdown, HTML… one tool for all.", "Images, Office, texte, Markdown, HTML… un seul outil."),
+    dict(id="any_to_pdf", cat="to_pdf", badge="PDF", icon="magic", color="#f59e0b",
+         title="Anything to PDF", desc="Images, Office, text, Markdown, HTML… one tool for all.",
          accept=sorted(cv.ANY_TO_PDF | {"pdf"}), multiple=True, mode="files",
-         options=[opt("merge", "checkbox", L("Merge into a single PDF", "Fusionner en un seul PDF"), default=False)],
+         options=[opt("merge", "checkbox", "Merge into a single PDF", default=False)],
          handler=to_pdf_each),
-    dict(id="img_to_pdf", cat="to_pdf", icon="image", color="#f5b400",
-         title=L("Image to PDF", "Image en PDF"), desc=L("JPG, PNG, WEBP, HEIC, TIFF… to PDF, with page layout.", "JPG, PNG, WEBP, HEIC, TIFF… en PDF, avec mise en page."),
+    dict(id="img_to_pdf", cat="to_pdf", badge="PDF", icon="image", color="#f5b400",
+         title="Image to PDF", desc="JPG, PNG, WEBP, HEIC, TIFF… to PDF, with page layout.",
          accept=sorted(cv.IMAGE_EXT), multiple=True, mode="files",
-         options=[opt("page_size", "select", L("Page size", "Format de page"), default="a4", choices=[
-             ["fit", L("Image size", "Taille de l'image")], ["a4", "A4"], ["letter", "US Letter"], ["a3", "A3"], ["a5", "A5"]]),
-             opt("orientation", "select", L("Orientation", "Orientation"), default="auto", choices=[
-                 ["auto", L("Automatic", "Automatique")], ["portrait", "Portrait"], ["landscape", L("Landscape", "Paysage")]]),
-             opt("margin", "select", L("Margins", "Marges"), default="none", choices=[["none", L("None", "Aucune")], ["small", L("Small", "Petites")], ["big", L("Large", "Grandes")]]),
-             opt("merge", "checkbox", L("Merge all images", "Fusionner toutes les images"), default=True)],
+         options=[opt("page_size", "select", "Page size", default="a4", choices=[
+             ["fit", "Image size"], ["a4", "A4"], ["letter", "US Letter"], ["a3", "A3"], ["a5", "A5"]]),
+             opt("orientation", "select", "Orientation", default="auto", choices=[
+                 ["auto", "Automatic"], ["portrait", "Portrait"], ["landscape", "Landscape"]]),
+             opt("margin", "select", "Margins", default="none", choices=[["none", "None"], ["small", "Small"], ["big", "Large"]]),
+             opt("merge", "checkbox", "Merge all images", default=True)],
          handler=images_handler),
-    dict(id="word_to_pdf", cat="to_pdf", icon="word", color="#2b6cde",
-         title=L("Word to PDF", "Word en PDF"), desc=L("DOCX, DOC, ODT, RTF to PDF.", "DOCX, DOC, ODT, RTF en PDF."),
+    dict(id="word_to_pdf", cat="to_pdf", badge="PDF", icon="word", color="#2b6cde",
+         title="Word to PDF", desc="DOCX, DOC, ODT, RTF to PDF.",
          accept=sorted(cv.WORD_EXT), multiple=True, mode="files", options=[], handler=to_pdf_each),
-    dict(id="excel_to_pdf", cat="to_pdf", icon="excel", color="#1f9d55",
-         title=L("Excel to PDF", "Excel en PDF"), desc=L("XLSX, XLS, ODS, CSV to PDF.", "XLSX, XLS, ODS, CSV en PDF."),
+    dict(id="excel_to_pdf", cat="to_pdf", badge="PDF", icon="excel", color="#1f9d55",
+         title="Excel to PDF", desc="XLSX, XLS, ODS, CSV to PDF.",
          accept=sorted(cv.EXCEL_EXT), multiple=True, mode="files", options=[], handler=to_pdf_each),
-    dict(id="ppt_to_pdf", cat="to_pdf", icon="ppt", color="#e8590c",
-         title=L("PowerPoint to PDF", "PowerPoint en PDF"), desc=L("PPTX, PPT, ODP to PDF.", "PPTX, PPT, ODP en PDF."), requires="libreoffice",
+    dict(id="ppt_to_pdf", cat="to_pdf", badge="PDF", icon="ppt", color="#e8590c",
+         title="PowerPoint to PDF", desc="PPTX, PPT, ODP to PDF.", requires="libreoffice",
          accept=sorted(cv.PPT_EXT), multiple=True, mode="files", options=[], handler=to_pdf_each),
-    dict(id="html_to_pdf", cat="to_pdf", icon="code", color="#f59e0b",
-         title=L("HTML / Markdown to PDF", "HTML / Markdown en PDF"), desc=L("Saved web pages, Markdown or plain text.", "Pages web enregistrées, Markdown ou texte."),
+    dict(id="html_to_pdf", cat="to_pdf", badge="PDF", icon="code", color="#f59e0b",
+         title="HTML / Markdown to PDF", desc="Saved web pages, Markdown or plain text.",
          accept=sorted(cv.HTML_EXT | cv.TEXT_EXT), multiple=True, mode="files", options=[], handler=to_pdf_each),
 
+    dict(id="url_to_pdf", cat="to_pdf", badge="PDF", icon="globe", color="#0ea5e9", requires="browser",
+         title="Web page to PDF", desc="Turn any web address into a clean PDF.",
+         accept=[], multiple=False, mode="url",
+         options=[opt("url", "url", "Web address", required=True, hint="e.g. https://example.com"),
+                  opt("render", "cards", "Rendering", default="screen", choices=[
+                      ["screen", "As on screen", "Desktop layout, split into pages"],
+                      ["single", "One long page", "Exactly like the screen, no page cuts"],
+                      ["print", "Print version", "Uses the site's print layout"]]),
+                  opt("page_size", "select", "Page size", default="a4", choices=[["a4", "A4"], ["letter", "US Letter"], ["a3", "A3"], ["legal", "Legal"]], show_if={"render": ["screen", "print"]}),
+                  opt("orientation", "select", "Orientation", default="portrait", choices=[["portrait", "Portrait"], ["landscape", "Landscape"]], show_if={"render": ["screen", "print"]}),
+                  opt("margin", "select", "Margins", default="small", choices=[["none", "None"], ["small", "Small"], ["normal", "Normal"]], show_if={"render": ["screen", "print"]}),
+                  opt("background", "checkbox", "Print background colors and images", default=True),
+                  opt("hide_banners", "checkbox", "Hide cookie banners", default=True)],
+         handler=lambda files, o, wd: url_handler(o, wd)),
+
     # ---------------------------------------------------------- Convert from PDF
-    dict(id="pdf_to_img", cat="from_pdf", icon="image", color="#f5b400",
-         title=L("PDF to image", "PDF en image"), desc=L("Each page to JPG/PNG, or extract embedded images.", "Chaque page en JPG/PNG, ou extraction des images."),
+    dict(id="pdf_to_img", cat="from_pdf", icon="pdf", badge="JPG", color="#f5b400",
+         title="PDF to image", desc="Each page to JPG/PNG, or extract embedded images.",
          accept=["pdf"], multiple=True, mode="files",
-         options=[opt("mode", "select", L("Mode", "Mode"), default="pages", choices=[["pages", L("Page → image", "Page → image")], ["extract", L("Extract images", "Extraire les images")]]),
-                  opt("format", "select", L("Format", "Format"), default="jpg", choices=[["jpg", "JPG"], ["png", "PNG"], ["webp", "WEBP"]]),
-                  opt("dpi", "select", L("Resolution", "Résolution"), default="150", choices=[["72", L("72 dpi (screen)", "72 dpi (écran)")], ["150", "150 dpi"], ["300", L("300 dpi (print)", "300 dpi (impression)")]], show_if={"mode": "pages"})],
+         options=[opt("mode", "select", "Mode", default="pages", choices=[["pages", "Page → image"], ["extract", "Extract images"]]),
+                  opt("format", "select", "Format", default="jpg", choices=[["jpg", "JPG"], ["png", "PNG"], ["webp", "WEBP"]]),
+                  opt("dpi", "select", "Resolution", default="150", choices=[["72", "72 dpi (screen)"], ["150", "150 dpi"], ["300", "300 dpi (print)"]], show_if={"mode": "pages"})],
          handler=from_pdf(cv.pdf_to_images)),
-    dict(id="pdf_to_word", cat="from_pdf", icon="word", color="#2b6cde",
-         title=L("PDF to Word", "PDF en Word"), desc=L("Convert to an editable DOCX.", "Convertissez en DOCX éditable."),
+    dict(id="pdf_to_word", cat="from_pdf", icon="pdf", badge="DOC", color="#2b6cde",
+         title="PDF to Word", desc="Convert to an editable DOCX.",
          accept=["pdf"], multiple=True, mode="files", options=[], handler=from_pdf(cv.pdf_to_docx)),
-    dict(id="pdf_to_ppt", cat="from_pdf", icon="ppt", color="#e8590c",
-         title=L("PDF to PowerPoint", "PDF en PowerPoint"), desc=L("One slide per page (text in speaker notes).", "Une diapositive par page (texte en notes)."),
+    dict(id="pdf_to_ppt", cat="from_pdf", icon="pdf", badge="PPT", color="#e8590c",
+         title="PDF to PowerPoint", desc="One slide per page (text in speaker notes).",
          accept=["pdf"], multiple=True, mode="files", options=[], handler=from_pdf(cv.pdf_to_pptx)),
-    dict(id="pdf_to_excel", cat="from_pdf", icon="excel", color="#1f9d55",
-         title=L("PDF to Excel", "PDF en Excel"), desc=L("Extract tables to XLSX.", "Extrait les tableaux vers XLSX."),
+    dict(id="pdf_to_excel", cat="from_pdf", icon="pdf", badge="XLS", color="#1f9d55",
+         title="PDF to Excel", desc="Extract tables to XLSX.",
          accept=["pdf"], multiple=True, mode="files", options=[], handler=from_pdf(cv.pdf_to_xlsx)),
-    dict(id="pdf_to_txt", cat="from_pdf", icon="text", color="#64748b",
-         title=L("PDF to text", "PDF en texte"), desc=L("Get all the raw text.", "Récupérez tout le texte brut."),
+    dict(id="pdf_to_txt", cat="from_pdf", icon="pdf", badge="TXT", color="#64748b",
+         title="PDF to text", desc="Get all the raw text.",
          accept=["pdf"], multiple=True, mode="files", options=[], handler=from_pdf(cv.pdf_to_text)),
 
     # ---------------------------------------------------------- Edit
     dict(id="edit", cat="edit", icon="pen", color="#d946ef",
-         title=L("Edit PDF", "Modifier PDF"), desc=L("Add text, images, shapes or hide an area.", "Ajoutez du texte, des images, des formes ou masquez une zone."),
+         title="Edit PDF", desc="Add text, images, shapes or hide an area.",
          accept=["pdf"], multiple=False, mode="editor", editor_tools=["text", "image", "rect", "signature"],
          options=[], handler=single(ops.edit)),
     dict(id="sign", cat="edit", icon="signature", color="#d946ef",
-         title=L("Sign PDF", "Signer PDF"), desc=L("Draw, type or upload your signature.", "Dessinez, tapez ou importez votre signature."),
+         title="Sign PDF", desc="Draw, type or upload your signature.",
          accept=["pdf"], multiple=False, mode="editor", editor_tools=["signature", "text"],
          options=[], handler=single(ops.edit)),
     dict(id="watermark", cat="edit", icon="droplet", color="#d946ef",
-         title=L("Watermark", "Filigrane"), desc=L("Stamp a translucent text or image over your pages.", "Texte ou image en transparence sur vos pages."),
-         accept=["pdf"], multiple=True, mode="files", extra_file={"name": "image", "label": L("Watermark image (optional)", "Image de filigrane (facultatif)"), "accept": ["png", "jpg", "jpeg", "webp"]},
-         options=[opt("text", "text", L("Text", "Texte"), default="CONFIDENTIAL"),
-                  opt("color", "color", L("Color", "Couleur"), default="#e5322d"),
-                  opt("size", "range", L("Size", "Taille"), default=60, min=12, max=160),
-                  opt("opacity", "range", L("Opacity (%)", "Opacité (%)"), default=25, min=5, max=100),
-                  opt("angle", "range", L("Angle", "Angle"), default=45, min=-90, max=90),
-                  opt("layout", "select", L("Layout", "Disposition"), default="center", choices=[["center", L("Centered", "Centré")], ["mosaic", L("Mosaic", "Mosaïque")]]),
+         title="Watermark", desc="Stamp a translucent text or image over your pages.",
+         accept=["pdf"], multiple=True, mode="files", extra_file={"name": "image", "label": "Watermark image (optional)", "accept": ["png", "jpg", "jpeg", "webp"]},
+         options=[opt("text", "text", "Text", default="CONFIDENTIAL"),
+                  opt("color", "color", "Color", default="#e5322d"),
+                  opt("size", "range", "Size", default=60, min=12, max=160),
+                  opt("opacity", "range", "Opacity (%)", default=25, min=5, max=100),
+                  opt("angle", "range", "Angle", default=45, min=-90, max=90),
+                  opt("layout", "select", "Layout", default="center", choices=[["center", "Centered"], ["mosaic", "Mosaic"]]),
                   opt("pages", "text", PAGES_ALL, default="", hint=RANGE_HINT)],
          handler=watermark_handler),
     dict(id="page_numbers", cat="edit", icon="hash", color="#d946ef",
-         title=L("Page numbers", "Numéroter les pages"), desc=L("Add custom page numbers.", "Ajoutez des numéros de page personnalisés."),
+         title="Page numbers", desc="Add custom page numbers.",
          accept=["pdf"], multiple=True, mode="files",
-         options=[opt("position", "position", L("Position", "Position"), default="bottom-center"),
-                  opt("format", "select", L("Format", "Format"), default="{n}", choices=[
+         options=[opt("position", "position", "Position", default="bottom-center"),
+                  opt("format", "select", "Format", default="{n}", choices=[
                       ["{n}", "1"], ["Page {n}", "Page 1"], ["{n} / {total}", "1 / 10"], ["Page {n} of {total}", "Page 1 of 10"], ["Page {n} sur {total}", "Page 1 sur 10"], ["- {n} -", "- 1 -"]]),
-                  opt("start", "number", L("First number", "Premier numéro"), default=1, min=0),
-                  opt("size", "range", L("Size", "Taille"), default=11, min=6, max=36),
-                  opt("color", "color", L("Color", "Couleur"), default="#333333"),
-                  opt("skip_first", "checkbox", L("Don't number the first page", "Ne pas numéroter la première page"))],
+                  opt("start", "number", "First number", default=1, min=0),
+                  opt("size", "range", "Size", default=11, min=6, max=36),
+                  opt("color", "color", "Color", default="#333333"),
+                  opt("skip_first", "checkbox", "Don't number the first page")],
          handler=single(ops.page_numbers)),
     dict(id="crop", cat="edit", icon="crop", color="#d946ef",
-         title=L("Crop PDF", "Rogner PDF"), desc=L("Trim margins on every page (in mm).", "Retirez des marges sur toutes les pages (en mm)."),
+         title="Crop PDF", desc="Trim margins on every page (in mm).",
          accept=["pdf"], multiple=True, mode="files",
-         options=[opt("top", "number", L("Top (mm)", "Haut (mm)"), default=10, min=0), opt("bottom", "number", L("Bottom (mm)", "Bas (mm)"), default=10, min=0),
-                  opt("left", "number", L("Left (mm)", "Gauche (mm)"), default=10, min=0), opt("right", "number", L("Right (mm)", "Droite (mm)"), default=10, min=0)],
+         options=[opt("top", "number", "Top (mm)", default=10, min=0), opt("bottom", "number", "Bottom (mm)", default=10, min=0),
+                  opt("left", "number", "Left (mm)", default=10, min=0), opt("right", "number", "Right (mm)", default=10, min=0)],
          handler=single(ops.crop)),
     dict(id="metadata", cat="edit", icon="tag", color="#d946ef",
-         title=L("Metadata", "Métadonnées"), desc=L("Edit title, author, subject and keywords.", "Modifiez titre, auteur, sujet et mots-clés."),
+         title="Metadata", desc="Edit title, author, subject and keywords.",
          accept=["pdf"], multiple=False, mode="files",
-         options=[opt("title", "text", L("Title", "Titre")), opt("author", "text", L("Author", "Auteur")),
-                  opt("subject", "text", L("Subject", "Sujet")), opt("keywords", "text", L("Keywords", "Mots-clés"))],
+         options=[opt("title", "text", "Title"), opt("author", "text", "Author"),
+                  opt("subject", "text", "Subject"), opt("keywords", "text", "Keywords")],
          handler=single(ops.metadata)),
     dict(id="flatten", cat="edit", icon="layers", color="#d946ef",
-         title=L("Flatten PDF", "Aplatir PDF"), desc=L("Freeze forms and annotations (pages become images).", "Fige formulaires et annotations (pages en image)."),
+         title="Flatten PDF", desc="Freeze forms and annotations (pages become images).",
          accept=["pdf"], multiple=True, mode="files",
-         options=[opt("dpi", "select", L("Quality", "Qualité"), default="150", choices=[["100", L("Light", "Légère")], ["150", "Standard"], ["220", L("High", "Haute")]])],
+         options=[opt("dpi", "select", "Quality", default="150", choices=[["100", "Light"], ["150", "Standard"], ["220", "High"]])],
          handler=single(ops.flatten)),
 
     # ---------------------------------------------------------- Security
     dict(id="protect", cat="security", icon="lock", color="#334155",
-         title=L("Protect PDF", "Protéger PDF"), desc=L("AES-256 encryption and usage restrictions.", "Chiffrement AES-256 et restrictions d'usage."),
+         title="Protect PDF", desc="AES-256 encryption and usage restrictions.",
          accept=["pdf"], multiple=True, mode="files",
-         options=[opt("password", "password", L("Password", "Mot de passe"), required=True),
-                  opt("confirm", "password", L("Confirm password", "Confirmer le mot de passe"), required=True),
-                  opt("no_print", "checkbox", L("Prevent printing", "Interdire l'impression")),
-                  opt("no_copy", "checkbox", L("Prevent copying text", "Interdire la copie du texte")),
-                  opt("no_edit", "checkbox", L("Prevent editing", "Interdire la modification"))],
+         options=[opt("password", "password", "Password", required=True),
+                  opt("confirm", "password", "Confirm password", required=True),
+                  opt("no_print", "checkbox", "Prevent printing"),
+                  opt("no_copy", "checkbox", "Prevent copying text"),
+                  opt("no_edit", "checkbox", "Prevent editing")],
          handler=single(ops.protect)),
     dict(id="unlock", cat="security", icon="unlock", color="#334155",
-         title=L("Unlock PDF", "Déverrouiller PDF"), desc=L("Remove the password (if you know it).", "Retirez le mot de passe (si vous le connaissez)."),
+         title="Unlock PDF", desc="Remove the password (if you know it).",
          accept=["pdf"], multiple=True, mode="files",
-         options=[opt("password", "password", L("Current password", "Mot de passe actuel"))],
+         options=[opt("password", "password", "Current password")],
          handler=single(ops.unlock)),
     dict(id="redact", cat="security", icon="redact", color="#334155",
-         title=L("Redact PDF", "Caviarder PDF"), desc=L("Permanently remove sensitive words or areas.", "Supprimez définitivement des mots ou des zones sensibles."),
+         title="Redact PDF", desc="Permanently remove sensitive words or areas.",
          accept=["pdf"], multiple=False, mode="editor", editor_tools=["redact"],
-         options=[opt("terms", "textarea", L("Words or phrases to redact", "Mots ou expressions à caviarder"), hint=L("One per line (names, IBAN, emails…)", "Un par ligne (noms, IBAN, e-mails…)")),
-                  opt("match_case", "checkbox", L("Match case", "Respecter la casse"))],
+         options=[opt("terms", "textarea", "Words or phrases to redact", hint="One per line (names, IBAN, emails…)"),
+                  opt("match_case", "checkbox", "Match case")],
          handler=single(ops.redact)),
 ]
 
@@ -281,6 +299,6 @@ def public_list() -> list[dict]:
         req = t.get("requires")
         d["available"] = engines.has(req) if req else True
         if req and not d["available"]:
-            d["missing"] = {"libreoffice": "LibreOffice", "ghostscript": "Ghostscript", "ocrmypdf": "OCRmyPDF + Tesseract"}.get(req, req)
+            d["missing"] = {"libreoffice": "LibreOffice", "ghostscript": "Ghostscript", "ocrmypdf": "OCRmyPDF + Tesseract", "browser": "Chrome / Edge"}.get(req, req)
         out.append(d)
     return out
