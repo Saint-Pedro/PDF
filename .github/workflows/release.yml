@@ -2,11 +2,17 @@ name: Desktop app
 
 # Builds the desktop application for Windows, macOS and Linux.
 # - On every push of a tag "v*" (e.g. v1.1.0): creates a GitHub release with the files attached.
-# - Manually (Actions tab > Desktop app > Run workflow): files are available as build artifacts.
+# - Manually (Actions tab > Desktop app > Run workflow): files are available as build artifacts,
+#   and attached to an existing release if a tag is given (e.g. v1.1.0).
 on:
   push:
     tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Attach the files to this existing release tag (optional, e.g. v1.1.0)"
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -21,7 +27,7 @@ jobs:
             name: windows
           - os: macos-14
             name: macos-arm64
-          - os: macos-13
+          - os: macos-15-intel   # macos-13 runners have been retired by GitHub
             name: macos-intel
           - os: ubuntu-22.04
             name: linux
@@ -55,8 +61,9 @@ jobs:
           name: PDF-Studio-${{ matrix.name }}
           path: PDF-Studio-*
       - name: Attach to release
-        if: startsWith(github.ref, 'refs/tags/')
+        if: startsWith(github.ref, 'refs/tags/') || inputs.tag != ''
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ inputs.tag || github.ref_name }}
           files: PDF-Studio-*
           generate_release_notes: true
