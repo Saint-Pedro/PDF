@@ -16,10 +16,11 @@ datas += collect_data_files("reportlab")
 datas += collect_data_files("pypdfium2_raw")
 datas += collect_data_files("docx")
 datas += collect_data_files("pptx")
+datas += collect_data_files("pymupdf")  # PyMuPDF resources (used by pdf2docx for PDF → Word)
 binaries = collect_dynamic_libs("pypdfium2_raw")
 hiddenimports = collect_submodules("app") + collect_submodules("uvicorn") + [
     "multipart", "python_multipart", "pdfplumber", "openpyxl", "pptx", "docx", "webview",
-]
+] + collect_submodules("pdf2docx")
 
 a = Analysis(
     [str(ROOT / "desktop.py")],
@@ -27,8 +28,7 @@ a = Analysis(
     binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,
-    # pdf2docx / PyMuPDF are AGPL: kept out of the binary (PDF → Word then uses LibreOffice or a basic export)
-    excludes=["pdf2docx", "fitz", "pymupdf", "tkinter", "matplotlib", "numpy.tests", "pytest"],
+    excludes=["tkinter", "matplotlib", "numpy.tests", "pytest"],
     noarchive=False,
 )
 pyz = PYZ(a.pure)

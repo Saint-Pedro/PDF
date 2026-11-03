@@ -68,7 +68,7 @@ To build the desktop app yourself: `pip install -r requirements-desktop.txt && p
 | Ghostscript | Better compression, PDF/A, vector grayscale |
 | OCRmyPDF + Tesseract | OCR |
 
-Note: `pdf2docx` (better PDF → Word) depends on PyMuPDF (AGPL). It is used when installed from source, but it is left out of the desktop builds.
+PDF → Word uses `pdf2docx` (based on PyMuPDF), included in the desktop builds.
 
 ## Customization
 
@@ -99,4 +99,12 @@ API docs: http://localhost:8000/api/docs — what's new: [CHANGELOG.md](CHANGELO
 
 ## Stack
 
-FastAPI · pypdf · pypdfium2 · reportlab · Pillow · pdf.js · pdf-lib · vanilla JS (no build step).
+FastAPI · pypdf · pypdfium2 · reportlab · Pillow · pdf2docx / PyMuPDF · pdf.js · pdf-lib · vanilla JS (no build step).
+
+## License
+
+PDF Studio is free software released under the [GNU Affero General Public License v3.0 or later](LICENSE).
+You may use, modify and redistribute it; if you distribute it, or offer a modified version as a network service,
+you must make your source code available under the same license.
+
+Bundled third-party code keeps its own license: pdf.js (Apache-2.0), pdf-lib (MIT), PyMuPDF (AGPL-3.0).

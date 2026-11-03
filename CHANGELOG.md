@@ -16,6 +16,7 @@
 - **5 languages** (English, French, Spanish, German, Italian), detected from your browser.
 - **Installable app** (from the browser, or as a desktop application) with the cat mascot.
 - Loading skeletons, animations, distinct icons, correct plurals.
+- **License: AGPL-3.0** (was MIT), so the desktop app can include the high-quality PDF → Word converter.
 
 ## 1.0.0
 
